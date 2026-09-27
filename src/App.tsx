@@ -1,0 +1,456 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Event, ClientQuestion, OptionLetter, QuizResultPayload } from './types/index.js';
+import { api, RegisterQuizResponse } from './services/api.js';
+import { Navbar } from './components/Navbar.js';
+import { StudentRegistration } from './components/StudentRegistration.js';
+import { QuizPlayer } from './components/QuizPlayer.js';
+import { QuizResult } from './components/QuizResult.js';
+import { Leaderboard } from './components/Leaderboard.js';
+import { ProjectorView } from './components/ProjectorView.js';
+import { AdminPanel } from './components/AdminPanel.js';
+import {
+  Sparkles,
+  School,
+  ArrowRight,
+  Tv,
+  Trophy,
+  Shield,
+  HelpCircle,
+  Clock,
+  Flame,
+  Award,
+} from 'lucide-react';
+
+export default function App() {
+  // Navigation State
+  const [currentView, setCurrentView] = useState<'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin'>('home');
+  const [activeEventCode, setActiveEventCode] = useState<string>('DEMO2026');
+
+  // Event State
+  const [currentEvent, setCurrentEvent] = useState<Event | null>(null);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [eventError, setEventError] = useState<string | null>(null);
+
+  // Student Active Session State
+  const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<ClientQuestion[]>([]);
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(300);
+  const [initialAnswers, setInitialAnswers] = useState<Record<string, OptionLetter>>({});
+  const [quizResult, setQuizResult] = useState<QuizResultPayload | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Code input on Home screen
+  const [homeCodeInput, setHomeCodeInput] = useState('');
+
+  // Parse path from window.location
+  const parseRoute = useCallback(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      setCurrentView('admin');
+    } else if (path.startsWith('/qr/')) {
+      const code = path.replace('/qr/', '').split('/')[0].toUpperCase();
+      if (code) setActiveEventCode(code);
+      setCurrentView('qr');
+    } else if (path.startsWith('/leaderboard/')) {
+      const code = path.replace('/leaderboard/', '').split('/')[0].toUpperCase();
+      if (code) setActiveEventCode(code);
+      setCurrentView('leaderboard');
+    } else if (path.startsWith('/quiz/')) {
+      const code = path.replace('/quiz/', '').split('/')[0].toUpperCase();
+      if (code) setActiveEventCode(code);
+      setCurrentView('quiz');
+    } else {
+      setCurrentView('home');
+    }
+  }, []);
+
+  useEffect(() => {
+    parseRoute();
+    const handlePopState = () => parseRoute();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [parseRoute]);
+
+  // Navigate helper
+  const navigate = (view: 'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin', paramCode?: string) => {
+    const code = paramCode ? paramCode.toUpperCase() : activeEventCode;
+    if (code) setActiveEventCode(code);
+    setCurrentView(view);
+
+    let targetUrl = '/';
+    if (view === 'admin') targetUrl = '/admin';
+    else if (view === 'quiz' && code) targetUrl = `/quiz/${code}`;
+    else if (view === 'qr' && code) targetUrl = `/qr/${code}`;
+    else if (view === 'leaderboard' && code) targetUrl = `/leaderboard/${code}`;
+
+    window.history.pushState({}, '', targetUrl);
+  };
+
+  // Load event details whenever on quiz/qr/leaderboard
+  useEffect(() => {
+    if (!activeEventCode) return;
+    let isMounted = true;
+
+    async function loadEventData() {
+      setEventLoading(true);
+      setEventError(null);
+      try {
+        const ev = await api.getEvent(activeEventCode);
+        if (isMounted) {
+          setCurrentEvent(ev);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setEventError(err.message || `Event '${activeEventCode}' not found`);
+          setCurrentEvent(null);
+        }
+      } finally {
+        if (isMounted) setEventLoading(false);
+      }
+    }
+
+    loadEventData();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeEventCode]);
+
+  // Check existing session from localStorage for this event code to support instant page refresh recovery
+  useEffect(() => {
+    if (currentView !== 'quiz' || !activeEventCode) return;
+
+    const storedAttemptId = localStorage.getItem(`innovit_attempt_${activeEventCode}`);
+    if (storedAttemptId) {
+      api
+        .checkAttempt(storedAttemptId)
+        .then((status) => {
+          if (status.status === 'completed' || status.expired) {
+            if (status.result) {
+              setQuizResult(status.result);
+            } else {
+              api.getResult(storedAttemptId).then(setQuizResult);
+            }
+          } else if (status.status === 'in_progress') {
+            setAttemptId(status.attemptId);
+            setQuizQuestions(status.questions);
+            setRemainingSeconds(status.remainingSeconds);
+            setInitialAnswers(status.existingAnswers || {});
+          }
+        })
+        .catch(() => {
+          // If expired or not found, clear stale key
+          localStorage.removeItem(`innovit_attempt_${activeEventCode}`);
+        });
+    }
+  }, [currentView, activeEventCode]);
+
+  // Handle student registration & start
+  const handleStudentRegistration = async (formData: {
+    fullName: string;
+    identifier: string;
+    collegeName: string;
+    branch: string;
+    year: string;
+  }) => {
+    setIsRegistering(true);
+    setRegistrationError(null);
+
+    try {
+      const response: RegisterQuizResponse = await api.registerQuiz({
+        eventCode: activeEventCode,
+        fullName: formData.fullName,
+        identifier: formData.identifier,
+        collegeName: formData.collegeName,
+        branch: formData.branch,
+        year: formData.year,
+      });
+
+      // Save to localStorage for refresh recovery
+      localStorage.setItem(`innovit_attempt_${activeEventCode}`, response.attemptId);
+
+      setAttemptId(response.attemptId);
+      setQuizQuestions(response.questions);
+      setRemainingSeconds(response.remainingSeconds);
+      setInitialAnswers(response.existingAnswers || {});
+      setQuizResult(null);
+    } catch (err: any) {
+      setRegistrationError(err.message || 'Registration failed');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  // Quiz submission completed
+  const handleQuizCompleted = (result: QuizResultPayload) => {
+    setQuizResult(result);
+    setAttemptId(null);
+  };
+
+  const handleHomeSubmitCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!homeCodeInput.trim()) return;
+    const cleanCode = homeCodeInput.trim().toUpperCase();
+    navigate('quiz', cleanCode);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* Hide standard navbar in Fullscreen Projector mode for clean presentation */}
+      {currentView !== 'qr' && (
+        <Navbar
+          currentView={currentView}
+          onNavigate={(view, code) => navigate(view as any, code)}
+          activeEventCode={activeEventCode}
+        />
+      )}
+
+      <main className="flex-1">
+        {/* VIEW: PROJECTOR QR */}
+        {currentView === 'qr' && (
+          <ProjectorView
+            eventCode={activeEventCode}
+            onBack={() => navigate('quiz', activeEventCode)}
+            onOpenLeaderboard={(code) => navigate('leaderboard', code)}
+          />
+        )}
+
+        {/* VIEW: ADMIN PANEL */}
+        {currentView === 'admin' && (
+          <AdminPanel
+            onOpenProjector={(code) => navigate('qr', code)}
+            onOpenLeaderboard={(code) => navigate('leaderboard', code)}
+          />
+        )}
+
+        {/* VIEW: LEADERBOARD */}
+        {currentView === 'leaderboard' && (
+          <Leaderboard
+            eventCode={activeEventCode}
+            onBack={() => navigate('quiz', activeEventCode)}
+          />
+        )}
+
+        {/* VIEW: QUIZ */}
+        {currentView === 'quiz' && (
+          <div>
+            {eventLoading ? (
+              <div className="py-24 text-center">
+                <div className="w-10 h-10 border-4 border-indigo-500/30 border-t-indigo-400 rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-slate-400 text-sm font-semibold">
+                  Connecting to {activeEventCode}...
+                </p>
+              </div>
+            ) : eventError ? (
+              <div className="max-w-md mx-auto my-16 px-4 text-center">
+                <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+                  <h2 className="text-xl font-bold text-white mb-2">Event Not Found</h2>
+                  <p className="text-xs sm:text-sm text-slate-400 mb-6">
+                    {eventError}. Please double-check your event code or scan the projector QR code again.
+                  </p>
+                  <button
+                    onClick={() => navigate('home')}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm"
+                  >
+                    Go to Portal Home
+                  </button>
+                </div>
+              </div>
+            ) : quizResult ? (
+              <QuizResult
+                result={quizResult}
+                onViewLeaderboard={(code) => navigate('leaderboard', code)}
+                onHome={() => {
+                  setQuizResult(null);
+                  navigate('home');
+                }}
+              />
+            ) : attemptId && quizQuestions.length > 0 ? (
+              <QuizPlayer
+                attemptId={attemptId}
+                questions={quizQuestions}
+                initialRemainingSeconds={remainingSeconds}
+                initialAnswers={initialAnswers}
+                onComplete={handleQuizCompleted}
+                eventName={currentEvent?.event_name || 'Innovit AI Challenge'}
+                collegeName={currentEvent?.college_name || ''}
+              />
+            ) : currentEvent ? (
+              <StudentRegistration
+                event={currentEvent}
+                onSubmit={handleStudentRegistration}
+                isLoading={isRegistering}
+                errorMessage={registrationError}
+              />
+            ) : null}
+          </div>
+        )}
+
+        {/* VIEW: HOME / LANDING */}
+        {currentView === 'home' && (
+          <div className="max-w-4xl mx-auto px-4 py-10 sm:py-16">
+            {/* Hero Banner */}
+            <div className="text-center relative">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-indigo-500/15 blur-[120px] rounded-full pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-bold uppercase tracking-wider mb-6">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  Innovit Engineering College Events
+                </div>
+
+                <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white mb-4">
+                  INNOVIT{' '}
+                  <span className="bg-gradient-to-r from-cyan-400 via-indigo-300 to-white bg-clip-text text-transparent">
+                    AI CHALLENGE
+                  </span>
+                </h1>
+
+                <p className="text-lg sm:text-xl text-slate-300 font-medium max-w-xl mx-auto mb-8">
+                  "How well do you really understand AI?"
+                  <span className="block text-sm text-slate-400 mt-2 font-normal">
+                    5 humorous, technically meaningful AI questions &bull; 5-minute server countdown &bull; Instant live leaderboard.
+                  </span>
+                </p>
+
+                {/* Event Code Form */}
+                <form
+                  onSubmit={handleHomeSubmitCode}
+                  className="max-w-md mx-auto mb-10 flex flex-col sm:flex-row gap-2"
+                >
+                  <input
+                    type="text"
+                    required
+                    value={homeCodeInput}
+                    onChange={(e) => setHomeCodeInput(e.target.value.toUpperCase())}
+                    placeholder="Enter College Event Code (e.g. DEMO2026)"
+                    className="flex-1 px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 font-mono text-center sm:text-left text-sm uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <span>Enter Quiz</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </form>
+
+                {/* Quick Launch Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                  {/* Demo Event Card */}
+                  <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 text-left hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-mono text-xs font-bold text-cyan-400 px-2 py-0.5 bg-cyan-950 border border-cyan-800 rounded">
+                          DEMO2026
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                          Ready to Test
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-white mb-1">
+                        Innovit AI Challenge Demo
+                      </h3>
+                      <p className="text-xs text-slate-400 flex items-center gap-1.5 mb-3">
+                        <School className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Gyan Sagar College of Engineering</span>
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Test the full student quiz flow, server timer countdown, refresh resumption, and instant scoring.
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+                      <button
+                        onClick={() => navigate('quiz', 'DEMO2026')}
+                        className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer text-center"
+                      >
+                        Start Demo Quiz &rarr;
+                      </button>
+                      <button
+                        onClick={() => navigate('qr', 'DEMO2026')}
+                        className="p-2 bg-slate-800 hover:bg-slate-750 text-violet-300 rounded-lg text-xs cursor-pointer"
+                        title="Display Projector QR on Auditorium Screen"
+                      >
+                        <Tv className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Projector Mode Card */}
+                  <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/40 border border-indigo-500/30 text-left flex flex-col justify-between shadow-xl">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
+                          For College Presenters
+                        </span>
+                        <Tv className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <h3 className="text-base font-bold text-white mb-1">
+                        Auditorium Projector QR
+                      </h3>
+                      <p className="text-xs text-slate-400 mb-3">
+                        High-contrast, fullscreen display designed for auditorium projectors with live audience join counter.
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
+                      <button
+                        onClick={() => navigate('qr', 'DEMO2026')}
+                        className="flex-1 py-2 px-3 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer text-center"
+                      >
+                        Launch Projector Mode
+                      </button>
+                      <button
+                        onClick={() => navigate('admin')}
+                        className="p-2 bg-slate-800 hover:bg-slate-750 text-indigo-300 rounded-lg text-xs cursor-pointer"
+                        title="Open Admin Console"
+                      >
+                        <Shield className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Features Highlights */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl mx-auto mt-12 pt-8 border-t border-slate-800/80 text-left">
+                  <div className="p-3">
+                    <Clock className="w-5 h-5 text-amber-400 mb-1.5" />
+                    <h4 className="text-xs font-bold text-white">Server-Timed</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Accurate countdown tracked on the database; page refreshes resume smoothly.
+                    </p>
+                  </div>
+
+                  <div className="p-3">
+                    <Award className="w-5 h-5 text-emerald-400 mb-1.5" />
+                    <h4 className="text-xs font-bold text-white">Strict Scoring</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Evaluated strictly on the server; client answers are never trusted.
+                    </p>
+                  </div>
+
+                  <div className="p-3">
+                    <Trophy className="w-5 h-5 text-cyan-400 mb-1.5" />
+                    <h4 className="text-xs font-bold text-white">Live Leaderboard</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Ranks by highest score &bull; fastest time &bull; earliest submission.
+                    </p>
+                  </div>
+
+                  <div className="p-3">
+                    <Shield className="w-5 h-5 text-indigo-400 mb-1.5" />
+                    <h4 className="text-xs font-bold text-white">1 Attempt Policy</h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Database enforces unique phone/email check with admin reset capabilities.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}

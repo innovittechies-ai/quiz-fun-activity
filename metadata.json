@@ -1,0 +1,6 @@
+{
+  "name": "Innovit College AI Quiz Portal",
+  "description": "Production-ready, event-based AI quiz platform for engineering college awareness events with projector QR codes, real-time server timer, and instant leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
