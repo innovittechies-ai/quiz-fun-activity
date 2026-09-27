@@ -4,8 +4,18 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const googleClientId =
+    process.env.ViteGoogleClientId ||
+    process.env.VITE_GOOGLE_CLIENT_ID ||
+    process.env.GOOGLE_CLIENT_ID ||
+    '';
+
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId),
+      'import.meta.env.ViteGoogleClientId': JSON.stringify(googleClientId),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

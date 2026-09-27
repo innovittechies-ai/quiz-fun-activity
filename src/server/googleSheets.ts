@@ -16,7 +16,10 @@ export class GoogleSheetsService {
   private accessToken: string | null = null;
 
   constructor(spreadsheetId?: string) {
-    this.spreadsheetId = spreadsheetId || process.env.GOOGLE_SHEET_ID || '';
+    this.spreadsheetId =
+      spreadsheetId ||
+      process.env.GOOGLE_SHEET_ID ||
+      '1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk';
   }
 
   public setAccessToken(token: string) {

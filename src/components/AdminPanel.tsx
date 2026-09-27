@@ -49,7 +49,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   });
   const [googleAccessToken, setGoogleAccessToken] = useState<string>(() => localStorage.getItem('innovit_google_token') || '');
-  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => localStorage.getItem('innovit_sheet_id') || '');
+  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => {
+    const saved = localStorage.getItem('innovit_sheet_id');
+    if (saved && saved !== '18hg3xBzI57FUl7Cyoo93B0-ybM94pjdEl1C__jKVECg') {
+      return saved;
+    }
+    return '1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk';
+  });
   const [sheetsConfigured, setSheetsConfigured] = useState<boolean>(false);
   const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>('');
   const [isConnectingSheets, setIsConnectingSheets] = useState(false);
@@ -181,6 +187,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await api.admin.configureSheets(token, spreadsheetIdInput.trim(), googleAccessToken);
       setSheetsConfigured(res.isConfigured);
       if (res.spreadsheetUrl) setSpreadsheetUrl(res.spreadsheetUrl);
+      localStorage.setItem('innovit_sheet_id', spreadsheetIdInput.trim());
       showNotification('Google Sheets structure initialized! All 5 tabs ready.');
     } catch (err: any) {
       showNotification(err.message || 'Failed to initialize sheets', 'error');
