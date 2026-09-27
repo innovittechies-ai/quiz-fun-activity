@@ -254,18 +254,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    if (!googleAccessToken) {
-      showNotification(
-        'Please click "Authorize Google Account" first to grant sheet access.',
-        'error'
-      );
-      handleConnectGoogleForSheets();
-      return;
-    }
-
     setIsConnectingSheets(true);
     try {
-      const res = await GoogleSheetsClient.ensureTabsAndHeaders(sheetId, googleAccessToken);
+      // Always get a fresh token before Sheets operations to avoid expired token errors
+      let freshToken = googleAccessToken;
+      try {
+        const { requestGoogleSheetsTokenViaGIS } = await import('../services/googleAuth.js');
+        freshToken = await requestGoogleSheetsTokenViaGIS();
+        setGoogleAccessToken(freshToken);
+        localStorage.setItem('innovit_google_token', freshToken);
+      } catch {
+        if (!freshToken) {
+          showNotification('Please authorize your Google Account first.', 'error');
+          setIsConnectingSheets(false);
+          return;
+        }
+      }
+
+      const res = await GoogleSheetsClient.ensureTabsAndHeaders(sheetId, freshToken);
       setSheetsConfigured(true);
       setSpreadsheetUrl(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`);
       localStorage.setItem('innovit_sheet_id', sheetId);
@@ -300,18 +306,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
 
-    if (!googleAccessToken) {
-      showNotification(
-        'Google Authorization Required: Click "Authorize Google Account" first to grant sheet access.',
-        'error'
-      );
-      handleConnectGoogleForSheets();
-      return;
-    }
-
     setIsConnectingSheets(true);
     try {
-      // Ensure latest student attempts are loaded
+      // Always get a fresh token to avoid expired token errors
+      let freshToken = googleAccessToken;
+      try {
+        const { requestGoogleSheetsTokenViaGIS } = await import('../services/googleAuth.js');
+        freshToken = await requestGoogleSheetsTokenViaGIS();
+        setGoogleAccessToken(freshToken);
+        localStorage.setItem('innovit_google_token', freshToken);
+      } catch {
+        if (!freshToken) {
+          showNotification('Please authorize your Google Account first.', 'error');
+          setIsConnectingSheets(false);
+          return;
+        }
+      }
+
+      // Fetch latest attempts
       let currentAttempts = attempts;
       if (!currentAttempts || currentAttempts.length === 0) {
         try {
@@ -322,31 +334,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       }
 
-      const rawData = {
-        events,
-        questions,
-        participants: [],
-        attempts: currentAttempts,
-        answers: [],
-      };
-      const directRes = await GoogleSheetsClient.syncAllData(sheetId, googleAccessToken, rawData);
+      const rawData = { events, questions, participants: [], attempts: currentAttempts, answers: [] };
+      const directRes = await GoogleSheetsClient.syncAllData(sheetId, freshToken, rawData);
       setSheetsConfigured(true);
       showNotification(directRes.message || 'Synced all records directly to Google Sheet!');
 
-      // Also invoke backend sync
       try {
-        await api.admin.syncAllSheets(token, googleAccessToken, sheetId);
+        await api.admin.syncAllSheets(token, freshToken, sheetId);
       } catch (bErr) {
         console.warn('Backend sync response:', bErr);
       }
     } catch (err: any) {
-      console.warn('Direct sync error, falling back to backend:', err);
-      try {
-        const res = await api.admin.syncAllSheets(token, googleAccessToken, sheetId);
-        showNotification(res.message || 'Synced successfully to Google Sheets!');
-      } catch (backendErr: any) {
-        showNotification(err.message || backendErr.message || 'Failed to sync to Google Sheets', 'error');
-      }
+      showNotification(err.message || 'Failed to sync to Google Sheets', 'error');
     } finally {
       setIsConnectingSheets(false);
     }
