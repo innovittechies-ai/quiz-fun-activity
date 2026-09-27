@@ -882,16 +882,13 @@ class DatabaseStore {
 
 // Use Supabase (Postgres) when configured (required for Vercel / multi-instance / 500 students).
 // Otherwise fall back to the local JSON file for `npm run dev`.
+// Static import (no top-level await) so Vercel's serverless function builder can bundle reliably.
+import { SupabaseDatabaseStore } from './supabaseDb.js';
+
 const useSupabase = Boolean(
   process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY,
 );
 
-let db: any;
-if (useSupabase) {
-  const { SupabaseDatabaseStore } = await import('./supabaseDb.js');
-  db = new SupabaseDatabaseStore();
-} else {
-  db = new DatabaseStore();
-}
+const db = useSupabase ? new SupabaseDatabaseStore() : new DatabaseStore();
 
 export { db };
