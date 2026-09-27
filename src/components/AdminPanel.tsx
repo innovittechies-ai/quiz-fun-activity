@@ -112,7 +112,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsLoggingIn(true);
     const pass = (customPass !== undefined ? customPass : passwordInput).trim();
     if (!pass) {
-      setLoginError('Please enter the admin passkey (default: innovit2026)');
+      setLoginError('Please enter the admin passkey.');
       setIsLoggingIn(false);
       return;
     }
@@ -153,9 +153,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } catch (err: any) {
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
         setShowPasskeyInput(true);
-        setPasswordInput('innovit2026');
         setLoginError(
-          `Domain "${window.location.hostname}" is not yet authorized in Firebase. Add "${window.location.hostname}" in Firebase Console > Authentication > Settings > Authorized domains, OR click the button below to sign in immediately with the Admin Passkey!`
+          `Google Sign-In isn't available for this domain yet. Use the Admin Passkey below (the password you set in Vercel as ADMIN_PASSWORD).`
         );
       } else {
         setLoginError(err.message || 'Google Sign-In failed');
@@ -425,7 +424,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           <h1 className="text-xl font-bold text-white mb-1">Innovit Admin Console</h1>
           <p className="text-xs text-slate-400 mb-6">
-            Sign in with your authorized Google account to manage college events, question banks, and live Google Sheets sync.
+            Sign in with your authorized Google account or admin passkey to manage events and view participants.
           </p>
 
           {loginError && (
@@ -447,10 +446,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleLogin(undefined, 'innovit2026')}
+                    onClick={() => setShowPasskeyInput(true)}
                     className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    <span>⚡ Instant Sign In with Admin Passkey (innovit2026)</span>
+                    <span>⚡ Use Admin Passkey instead</span>
                   </button>
                 </div>
               )}
@@ -476,7 +475,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="flex items-center gap-2 justify-center text-[11px] text-slate-400">
               <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Authorized Admin: <strong className="text-slate-300">innovit.techies@gmail.com</strong></span>
+              <span>Authorized admin only — sign in with your configured Google account or passkey.</span>
             </div>
           </div>
 
@@ -498,7 +497,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     required
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Admin Passkey (default: innovit2026)"
+                    placeholder="Admin Passkey"
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                 </div>
