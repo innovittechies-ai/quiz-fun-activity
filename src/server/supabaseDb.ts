@@ -27,9 +27,15 @@ interface PDoc {
 }
 
 let _client: SupabaseClient | null = null;
+function resolveUrl(): string {
+  const raw = (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  // Treat as project ref: build https://<ref>.supabase.co
+  return `https://${raw}.supabase.co`;
+}
 function client(): SupabaseClient {
   if (_client) return _client;
-  const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const url = resolveUrl();
   const key = process.env.SUPABASE_SERVICE_KEY || DEFAULT_SUPABASE_SERVICE_KEY;
   _client = createClient(url, key, { auth: { persistSession: false } });
   return _client;
