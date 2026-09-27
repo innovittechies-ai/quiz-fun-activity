@@ -117,19 +117,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // Login handler via Emergency Passkey
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent, customPass?: string) => {
+    if (e) e.preventDefault();
     setLoginError(null);
     setIsLoggingIn(true);
+    const pass = (customPass !== undefined ? customPass : passwordInput).trim();
+    if (!pass) {
+      setLoginError('Please enter the admin passkey (default: innovit2026)');
+      setIsLoggingIn(false);
+      return;
+    }
     try {
-      const validToken = await api.admin.login(passwordInput.trim());
-      setToken(validToken);
-      localStorage.setItem('innovit_admin_token', validToken);
-      setAdminUser({ email: 'innovit.admin@innovit.org', name: 'Innovit Admin' });
-      localStorage.setItem(
-        'innovit_admin_user',
-        JSON.stringify({ email: 'innovit.admin@innovit.org', name: 'Innovit Admin' }),
-      );
+      const res = await api.admin.login(pass, spreadsheetIdInput.trim() || undefined);
+      const tokenVal = typeof res === 'string' ? res : res.token;
+      setToken(tokenVal);
+      localStorage.setItem('innovit_admin_token', tokenVal);
+      const user = res.adminUser || { email: 'innovit.admin@innovit.org', name: 'Innovit Admin' };
+      setAdminUser(user);
+      localStorage.setItem('innovit_admin_user', JSON.stringify(user));
+      if (res.sheetsConfigured !== undefined) setSheetsConfigured(res.sheetsConfigured);
+      if (res.spreadsheetUrl) setSpreadsheetUrl(res.spreadsheetUrl);
       setPasswordInput('');
       showNotification('Signed in successfully with Admin Passkey');
     } catch (err: any) {
@@ -159,7 +166,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       showNotification(`Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`);
     } catch (err: any) {
-      setLoginError(err.message || 'Google Sign-In failed');
+      if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+        setShowPasskeyInput(true);
+        setPasswordInput('innovit2026');
+        setLoginError(
+          `Domain "${window.location.hostname}" is not yet authorized in Firebase. Add "${window.location.hostname}" in Firebase Console > Authentication > Settings > Authorized domains, OR click the button below to sign in immediately with the Admin Passkey!`
+        );
+      } else {
+        setLoginError(err.message || 'Google Sign-In failed');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -461,8 +476,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </p>
 
           {loginError && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-left">
-              {loginError}
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-left space-y-2.5">
+              <div className="flex items-start gap-2">
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-rose-200 leading-relaxed">{loginError}</p>
+                </div>
+              </div>
+              {loginError.includes('authorized in Firebase') && (
+                <div className="pt-2 border-t border-rose-500/20 text-[11px] text-rose-300 space-y-2">
+                  <p className="text-slate-400 text-[11px]">
+                    To enable 1-click Google Sign-In, add this domain to Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains:
+                  </p>
+                  <div className="bg-slate-950/80 p-2 rounded-lg font-mono text-cyan-300 text-[11px] select-all border border-slate-800 flex items-center justify-between">
+                    <span>{typeof window !== 'undefined' ? window.location.hostname : 'quiz-fun-activity.vercel.app'}</span>
+                    <span className="text-[10px] text-slate-500 uppercase font-sans font-bold">Copy</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLogin(undefined, 'innovit2026')}
+                    className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <span>⚡ Instant Sign In with Admin Passkey (innovit2026)</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

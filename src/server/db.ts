@@ -24,7 +24,9 @@ interface DatabaseSchema {
   attempt_answers: AttemptAnswer[];
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_DIR = process.env.VERCEL
+  ? path.join('/tmp', 'data')
+  : path.resolve(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'innovit_quiz.json');
 
 class DatabaseStore {
