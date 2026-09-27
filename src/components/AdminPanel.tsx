@@ -166,7 +166,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setSheetsConfigured(loginRes.sheetsConfigured);
       if (loginRes.spreadsheetUrl) setSpreadsheetUrl(loginRes.spreadsheetUrl);
 
-      showNotification(`Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`);
+      showNotification(
+        loginRes.rosterMessage ||
+          `Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`
+      );
     } catch (err: any) {
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
         setShowPasskeyInput(true);
@@ -223,13 +226,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       showNotification('Google Account authorized successfully! Live Sheets access enabled.');
 
-      // Also automatically initialize 5 tabs in the sheet
       if (sId) {
         try {
           await GoogleSheetsClient.ensureTabsAndHeaders(sId, authResult.accessToken);
+          if (token) {
+            await api.admin.configureSheets(token, sId, authResult.accessToken);
+          }
           showNotification('Google Account authorized and all 5 tabs verified in your sheet!');
         } catch (tabErr: any) {
           console.warn('Tab init on connect:', tabErr);
+          showNotification(tabErr.message || 'Google authorized, but the sheet tabs could not be updated.', 'error');
         }
       }
     } catch (err: any) {
@@ -277,9 +283,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       localStorage.setItem('innovit_sheet_id', sheetId);
       showNotification(res.message || 'All 5 tabs verified and initialized in your Google Sheet!');
 
-      // Notify backend if available
       try {
-        await api.admin.configureSheets(token, sheetId, googleAccessToken);
+        await api.admin.configureSheets(token, sheetId, freshToken);
       } catch (beErr) {
         console.warn('Backend configure error:', beErr);
       }
@@ -323,18 +328,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       }
 
-      // Fetch latest attempts
-      let currentAttempts = attempts;
-      if (!currentAttempts || currentAttempts.length === 0) {
-        try {
-          currentAttempts = await api.admin.getAttempts(token, selectedEventCode || 'DEMO2026');
-          setAttempts(currentAttempts);
-        } catch (e) {
-          console.warn('Could not fetch attempts for sync:', e);
+      // Load every event's students so name, contact, college, branch, and score are written
+      const eventList = events.length > 0 ? events : await api.admin.getEvents(token);
+      const roster: any[] = [];
+      for (const ev of eventList) {
+        const rows = await api.admin.getAttempts(token, ev.event_code);
+        for (const row of rows || []) {
+          roster.push({ ...row, eventCode: row.eventCode || ev.event_code });
         }
       }
+      if (selectedEventCode) {
+        setAttempts(roster.filter((row) => row.eventCode === selectedEventCode));
+      } else {
+        setAttempts(roster);
+      }
 
-      const rawData = { events, questions, participants: [], attempts: currentAttempts, answers: [] };
+      const rawData = { events: eventList, questions, participants: roster, attempts: roster, answers: [] };
       const directRes = await GoogleSheetsClient.syncAllData(sheetId, freshToken, rawData);
       setSheetsConfigured(true);
       showNotification(directRes.message || 'Synced all records directly to Google Sheet!');
@@ -1665,11 +1674,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-violet-300 font-mono">5. Attempts</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
+                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">13 columns</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mb-2">Individual submission records with student names.</p>
+                <p className="text-[11px] text-slate-400 mb-2">Each submission with the student's contact details and score.</p>
                 <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>#, Student Name, College</div>
+                  <div>#, Student Name, Email, Mobile</div>
+                  <div>College, Branch, Year</div>
                   <div>Score, Percentage, Time Taken, Status</div>
                   <div>Submitted At, Event Code</div>
                 </div>

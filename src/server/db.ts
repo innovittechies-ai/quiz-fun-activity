@@ -423,6 +423,7 @@ class DatabaseStore {
           // Clear previous answers
           this.data.attempt_answers = this.data.attempt_answers.filter((a) => a.attempt_id !== attempt.id);
           this.persist();
+          this.pushRosterToSheets();
 
           const clientQuestions = this.getClientQuestionsForEvent(event);
           return {
@@ -451,7 +452,6 @@ class DatabaseStore {
         created_at: new Date().toISOString(),
       };
       this.data.participants.push(participant);
-      googleSheetsService.recordParticipant(participant).catch(() => {});
     }
 
     const clientQuestions = this.getClientQuestionsForEvent(event);
@@ -472,6 +472,7 @@ class DatabaseStore {
 
     this.data.quiz_attempts.push(newAttempt);
     this.persist();
+    this.pushRosterToSheets();
 
     return {
       attempt: newAttempt,
@@ -629,46 +630,7 @@ class DatabaseStore {
     attempt.percentage = percentage;
 
     this.persist();
-
-    // High-concurrency background Google Sheets sync in a single atomic batch
-    try {
-      const answersForSheet = Object.entries(studentAnswers).map(([qId, opt]) => {
-        const qObj = this.getQuestionById(qId);
-        return {
-          attemptId: attempt.id,
-          questionId: qId,
-          selectedOption: opt,
-          isCorrect: qObj?.correct_answer === opt,
-          answeredAt: now.toISOString(),
-        };
-      });
-
-      const isEmail = (participant.identifier || '').includes('@');
-      googleSheetsService.recordCompletedQuiz(
-        {
-          id: attempt.id,
-          eventId: attempt.event_id,
-          eventCode: event.event_code,
-          participantId: attempt.participant_id,
-          participantName: participant.full_name,
-          email: isEmail ? participant.identifier : '',
-          mobile: isEmail ? '' : participant.identifier,
-          college: participant.college_name,
-          branch: participant.branch || '',
-          year: participant.year || '',
-          startedAt: attempt.started_at,
-          completedAt: attempt.completed_at,
-          score: attempt.score,
-          totalQuestions,
-          percentage: attempt.percentage,
-          durationTakenSeconds: attempt.duration_taken_seconds,
-          status: attempt.status,
-        },
-        answersForSheet,
-      ).catch((err) => console.warn('Google Sheets sync warning:', err));
-    } catch (err) {
-      console.warn('Google Sheets sync trigger error:', err);
-    }
+    this.pushRosterToSheets();
 
     return {
       attemptId: attempt.id,
@@ -759,6 +721,7 @@ class DatabaseStore {
     // Delete stored answers
     this.data.attempt_answers = this.data.attempt_answers.filter((a) => a.attempt_id !== attemptId);
     this.persist();
+    this.pushRosterToSheets();
   }
 
   // --- LEADERBOARD ---
@@ -856,6 +819,7 @@ class DatabaseStore {
         collegeName: p ? p.college_name : 'Unknown',
         branch: p?.branch || '',
         year: p?.year || '',
+        eventCode: event.event_code,
         status: a.status,
         score: a.score,
         totalQuestions: a.total_questions,
@@ -908,6 +872,18 @@ class DatabaseStore {
     ]);
 
     return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n') + '\r\n';
+  }
+
+  private sheetWrite: Promise<void> = Promise.resolve();
+
+  private pushRosterToSheets() {
+    const run = async () => {
+      const snapshot = this.getRawData();
+      await googleSheetsService.syncAllData(snapshot);
+    };
+    this.sheetWrite = this.sheetWrite.then(run, run).catch((err) => {
+      console.warn('Google Sheets student sync failed:', err?.message || err);
+    });
   }
 
   public getRawData() {

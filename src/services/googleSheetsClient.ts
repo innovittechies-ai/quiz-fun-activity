@@ -76,7 +76,11 @@ export const REQUIRED_TABS: SheetTabDefinition[] = [
     headers: [
       '#',
       'Student Name',
+      'Email',
+      'Mobile',
       'College',
+      'Branch',
+      'Year',
       'Score',
       'Percentage',
       'Time Taken',
@@ -213,71 +217,47 @@ export class GoogleSheetsClient {
       }
     };
 
-    // 2. Tab: Participants & Results (Straight, Simple, and All-in-One)
+    // 2. Tab: Participants and Attempts — full student details, written under the header
     const attemptsList = data.attempts || [];
     const participantsList = data.participants || [];
     const participantRows: any[][] = [];
 
-    // If attemptsList is provided (e.g. from api.admin.getAttempts which includes student info & score)
+    const pushAttemptRow = (att: any, idx: number) => {
+      const contact = att.identifier || att.email || att.mobile || '';
+      const isEmail = String(contact).includes('@');
+      const scoreText = att.status === 'completed'
+        ? `${att.score} / ${att.totalQuestions || att.total_questions || 5}`
+        : (att.status === 'in_progress' ? 'In Progress' : (att.score ? `${att.score}` : 'Registered'));
+      const pctText = att.status === 'completed' ? `${att.percentage}%` : '-';
+      const durText = formatDuration(att.durationTakenSeconds || att.duration_taken_seconds);
+      const dateText = formatDate(att.completedAt || att.completed_at || att.startedAt || att.started_at);
+
+      participantRows.push([
+        idx + 1,
+        att.fullName || att.full_name || att.name || 'Student',
+        isEmail ? contact : (att.email || '-'),
+        isEmail ? (att.mobile || '-') : (contact || '-'),
+        att.collegeName || att.college_name || att.college || 'Engineering College',
+        att.branch || '-',
+        att.year || '-',
+        scoreText,
+        pctText,
+        durText,
+        att.status === 'completed' ? 'Completed' : (att.status === 'in_progress' ? 'In Progress' : (att.status || 'Registered')),
+        dateText,
+        att.eventCode || att.event_code || 'DEMO2026',
+      ]);
+    };
+
     if (attemptsList.length > 0) {
-      attemptsList.forEach((att, idx) => {
-        const isEmail = (att.identifier || '').includes('@');
-        const scoreText = att.status === 'completed'
-          ? `${att.score} / ${att.totalQuestions || 5}`
-          : 'In Progress';
-        const pctText = att.status === 'completed' ? `${att.percentage}%` : '-';
-        const durText = formatDuration(att.durationTakenSeconds);
-        const dateText = formatDate(att.completedAt || att.startedAt);
-
-        participantRows.push([
-          idx + 1,
-          att.fullName || att.name || 'Student',
-          isEmail ? att.identifier : (att.email || '-'),
-          isEmail ? (att.mobile || '-') : (att.identifier || '-'),
-          att.collegeName || att.college || 'Engineering College',
-          att.branch || '-',
-          att.year || '-',
-          scoreText,
-          pctText,
-          durText,
-          att.status === 'completed' ? 'Completed' : 'In Progress',
-          dateText,
-          att.eventCode || 'DEMO2026',
-        ]);
-      });
+      attemptsList.forEach((att, idx) => pushAttemptRow(att, idx));
     } else if (participantsList.length > 0) {
-      participantsList.forEach((p, idx) => {
-        const isEmail = (p.identifier || '').includes('@');
-        const att = attemptsList.find((a: any) => a.participant_id === p.id || a.participantId === p.id);
-        const scoreText = att
-          ? (att.status === 'completed' ? `${att.score} / ${att.total_questions || 5}` : 'In Progress')
-          : 'Registered';
-        const pctText = att && att.status === 'completed' ? `${att.percentage}%` : '-';
-        const durText = formatDuration(att?.duration_taken_seconds || att?.durationTakenSeconds);
-        const dateText = formatDate(att?.completed_at || att?.started_at || p.created_at);
-
-        participantRows.push([
-          idx + 1,
-          p.full_name || p.name || 'Student',
-          isEmail ? p.identifier : (p.email || '-'),
-          isEmail ? (p.mobile || '-') : (p.identifier || '-'),
-          p.college_name || p.college || 'Engineering College',
-          p.branch || '-',
-          p.year || '-',
-          scoreText,
-          pctText,
-          durText,
-          att?.status === 'completed' ? 'Completed' : (att ? 'In Progress' : 'Registered'),
-          dateText,
-          p.event_code || 'DEMO2026',
-        ]);
-      });
+      participantsList.forEach((p, idx) => pushAttemptRow(p, idx));
     }
 
-    if (participantRows.length > 0) {
-      await this.appendRows(spreadsheetId, accessToken, 'Participants!A:M', participantRows);
-      totalRows += participantRows.length;
-    }
+    await this.replaceDataRows(spreadsheetId, accessToken, 'Participants', participantRows);
+    await this.replaceDataRows(spreadsheetId, accessToken, 'Attempts', participantRows);
+    totalRows += participantRows.length;
 
     // 3. Tab: Leaderboard (Rankings sorted by highest score & lowest duration)
     const sortedForLeaderboard = [...attemptsList]
@@ -287,58 +267,81 @@ export class GoogleSheetsClient {
         return (a.durationTakenSeconds || 999) - (b.durationTakenSeconds || 999);
       });
 
-    if (sortedForLeaderboard.length > 0) {
-      const leaderboardRows = sortedForLeaderboard.map((att, idx) => [
-        idx + 1,
-        att.fullName || att.name || 'Student',
-        att.collegeName || att.college || 'Engineering College',
-        att.branch || '-',
-        `${att.score} / ${att.totalQuestions || 5}`,
-        `${att.percentage}%`,
-        formatDuration(att.durationTakenSeconds),
-        formatDate(att.completedAt),
-        att.eventCode || 'DEMO2026',
-      ]);
-      await this.appendRows(spreadsheetId, accessToken, 'Leaderboard!A:I', leaderboardRows).catch(() => {});
-    }
+    const leaderboardRows = sortedForLeaderboard.map((att, idx) => [
+      idx + 1,
+      att.fullName || att.full_name || att.name || 'Student',
+      att.collegeName || att.college_name || att.college || 'Engineering College',
+      att.branch || '-',
+      `${att.score} / ${att.totalQuestions || att.total_questions || 5}`,
+      `${att.percentage}%`,
+      formatDuration(att.durationTakenSeconds || att.duration_taken_seconds),
+      formatDate(att.completedAt || att.completed_at),
+      att.eventCode || att.event_code || 'DEMO2026',
+    ]);
+    await this.replaceDataRows(spreadsheetId, accessToken, 'Leaderboard', leaderboardRows);
 
     // 4. Tab: Questions (Readable Question Bank)
-    if (data.questions && data.questions.length > 0) {
-      const qRows = data.questions.map((q, idx) => [
-        idx + 1,
-        q.question || '',
-        q.option_a || '',
-        q.option_b || '',
-        q.option_c || '',
-        q.option_d || '',
-        q.correct_answer ? `Option ${q.correct_answer}` : '',
-        q.explanation || '',
-        q.topic || 'AI & Engineering',
-      ]);
-      await this.appendRows(spreadsheetId, accessToken, 'Questions!A:I', qRows);
-      totalRows += qRows.length;
-    }
+    const qRows = (data.questions || []).map((q, idx) => [
+      idx + 1,
+      q.question || '',
+      q.option_a || '',
+      q.option_b || '',
+      q.option_c || '',
+      q.option_d || '',
+      q.correct_answer ? `Option ${q.correct_answer}` : '',
+      q.explanation || '',
+      q.topic || 'AI & Engineering',
+    ]);
+    await this.replaceDataRows(spreadsheetId, accessToken, 'Questions', qRows);
+    totalRows += qRows.length;
 
     // 5. Tab: Events (College Events)
-    if (data.events && data.events.length > 0) {
-      const eventRows = data.events.map((e, idx) => [
-        idx + 1,
-        e.event_code || '',
-        e.event_name || '',
-        e.college_name || '',
-        `${Math.round((e.duration_seconds || 300) / 60)} Minutes`,
-        e.is_active ? 'Active' : 'Inactive',
-        formatDate(e.created_at),
-      ]);
-      await this.appendRows(spreadsheetId, accessToken, 'Events!A:G', eventRows);
-      totalRows += eventRows.length;
-    }
+    const eventRows = (data.events || []).map((e, idx) => [
+      idx + 1,
+      e.event_code || '',
+      e.event_name || '',
+      e.college_name || '',
+      `${Math.round((e.duration_seconds || 300) / 60)} Minutes`,
+      e.is_active ? 'Active' : 'Inactive',
+      formatDate(e.created_at),
+    ]);
+    await this.replaceDataRows(spreadsheetId, accessToken, 'Events', eventRows);
+    totalRows += eventRows.length;
 
+    const studentCount = participantRows.length;
     return {
       success: true,
-      message: `Successfully synchronized ${totalRows} records! Open your sheet to see participants with their live quiz scores and rankings.`,
+      message: studentCount > 0
+        ? `Saved ${studentCount} student record${studentCount === 1 ? '' : 's'} to Google Sheets, including name, email or mobile, college, branch, year, and score.`
+        : 'Google Sheets updated, but no quiz participants were found to write.',
       rowsSynced: totalRows,
+      studentsSynced: studentCount,
     };
+  }
+
+  static async replaceDataRows(
+    spreadsheetId: string,
+    accessToken: string,
+    sheetName: string,
+    rows: any[][]
+  ) {
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
+      spreadsheetId
+    )}/values/${encodeURIComponent(`${sheetName}!A2:Z5000`)}:clear`;
+    const clearRes = await fetch(clearUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    if (!clearRes.ok) {
+      const err = await clearRes.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Failed to clear ${sheetName}`);
+    }
+    if (!rows.length) return null;
+    return this.updateRange(spreadsheetId, accessToken, `${sheetName}!A2`, rows);
   }
 
   /**
@@ -386,7 +389,7 @@ export class GoogleSheetsClient {
 
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
       spreadsheetId
-    )}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+    )}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
 
     const res = await fetch(url, {
       method: 'PUT',

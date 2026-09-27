@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { db } from './src/server/db.js';
 import { googleSheetsService } from './src/server/googleSheets.js';
+import { loadPersistedAuth, savePersistedAuth, AdminSession } from './src/server/persistedAuth.js';
 
 dotenv.config();
 
@@ -20,8 +21,28 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'innovit.techies@gmail.com')
 
 app.use(express.json());
 
-// In-memory set of verified active Google admin session tokens
-const verifiedGoogleAdminTokens = new Map<string, { email: string; expiresAt: number; googleAccessToken: string }>();
+// Verified Google admin sessions. Restored from disk so a server restart does not hide student records.
+const verifiedGoogleAdminTokens = new Map<string, AdminSession>();
+
+function persistAdminSessions() {
+  const adminSessions: Record<string, AdminSession> = {};
+  for (const [token, session] of verifiedGoogleAdminTokens) {
+    adminSessions[token] = session;
+  }
+  savePersistedAuth({ adminSessions });
+}
+
+function hydrateAdminSessions() {
+  const saved = loadPersistedAuth();
+  const now = Date.now();
+  for (const [token, session] of Object.entries(saved.adminSessions || {})) {
+    if (session?.expiresAt > now && session.googleAccessToken) {
+      verifiedGoogleAdminTokens.set(token, session);
+    }
+  }
+}
+
+hydrateAdminSessions();
 
 // Request logger for debugging live events
 app.use((req, res, next) => {
@@ -306,6 +327,14 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
       googleAccessToken: accessToken,
     });
+    persistAdminSessions();
+
+    let rosterSync: { studentsSynced?: number; message?: string } | null = null;
+    try {
+      rosterSync = await googleSheetsService.syncAllData(db.getRawData());
+    } catch (syncErr: any) {
+      console.warn('Roster sync after Google login:', syncErr?.message || syncErr);
+    }
 
     res.json({
       success: true,
@@ -317,6 +346,8 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
       },
       sheetsConfigured: googleSheetsService.isConfigured(),
       spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
+      studentsSynced: rosterSync?.studentsSynced ?? 0,
+      rosterMessage: rosterSync?.message,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Google authentication failed' });
@@ -357,6 +388,7 @@ app.post('/api/admin/sheets/config', requireAdmin, async (req: Request, res: Res
     }
 
     const initResult = await googleSheetsService.ensureSheetStructure();
+    const rosterSync = await googleSheetsService.syncAllData(db.getRawData());
 
     res.json({
       success: true,
@@ -364,6 +396,8 @@ app.post('/api/admin/sheets/config', requireAdmin, async (req: Request, res: Res
       spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
       isConfigured: googleSheetsService.isConfigured(),
       structureStatus: initResult,
+      studentsSynced: rosterSync.studentsSynced,
+      rosterMessage: rosterSync.message,
     });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

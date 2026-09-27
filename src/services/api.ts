@@ -7,7 +7,6 @@ import {
   AdminStats,
   OptionLetter,
 } from '../types/index.js';
-import { SAMPLE_QUESTIONS } from '../server/sampleQuestions.js';
 
 const API_BASE = '/api';
 
@@ -48,8 +47,27 @@ export const api = {
   async getEvent(code: string): Promise<Event> {
     try {
       const res = await fetch(`${API_BASE}/events/${encodeURIComponent(code)}`);
-      if (res.ok) return await res.json();
-    } catch {}
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          id: data.id,
+          event_name: data.event_name || data.eventName || '',
+          college_name: data.college_name || data.collegeName || '',
+          event_code: data.event_code || data.eventCode || code.toUpperCase(),
+          description: data.description || '',
+          duration_seconds: data.duration_seconds ?? data.durationSeconds ?? 300,
+          is_active: data.is_active ?? data.isActive ?? true,
+          leaderboard_enabled: data.leaderboard_enabled ?? data.leaderboardEnabled ?? true,
+          question_ids: data.question_ids || [],
+          created_at: data.created_at || data.createdAt || new Date().toISOString(),
+          updated_at: data.updated_at || data.updatedAt,
+        };
+      }
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Event code '${code}' not found.`);
+    } catch (err: any) {
+      if (err?.message && !String(err.message).includes('Failed to fetch')) throw err;
+    }
     if (code.toUpperCase() === 'DEMO2026') {
       return {
         id: 'event-demo-2026',
@@ -77,75 +95,24 @@ export const api = {
     branch?: string;
     year?: string;
   }): Promise<RegisterQuizResponse> {
-    try {
-      const res = await fetch(`${API_BASE}/quiz/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) return await res.json();
-    } catch {}
-
-    const attemptId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const questions: ClientQuestion[] = SAMPLE_QUESTIONS.slice(0, 5).map((q) => ({
-      id: q.id,
-      question: q.question,
-      option_a: q.option_a,
-      option_b: q.option_b,
-      option_c: q.option_c,
-      option_d: q.option_d,
-      topic: q.topic,
-      difficulty: q.difficulty,
-    }));
-
-    return {
-      attemptId,
-      participantId: `part_${Date.now()}`,
-      startedAt: new Date().toISOString(),
-      durationSeconds: 300,
-      remainingSeconds: 300,
-      questions,
-      existingAnswers: {},
-      isResumed: false,
-      event: {
-        eventName: 'Innovit AI Challenge Demo',
-        collegeName: data.collegeName || 'Gyan Sagar College of Engineering',
-        eventCode: data.eventCode.toUpperCase(),
-      },
-      participant: {
-        fullName: data.fullName,
-        collegeName: data.collegeName || '',
-      },
-    };
+    const res = await fetch(`${API_BASE}/quiz/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (res.ok) return await res.json();
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Registration failed. Your details were not saved.');
   },
 
   // Check attempt status & remaining server timer
   async checkAttempt(attemptId: string): Promise<AttemptStatusResponse> {
-    try {
-      const res = await fetch(`${API_BASE}/quiz/attempt/${attemptId}`);
-      if (res.ok) return await res.json();
-    } catch {}
-
-    const questions: ClientQuestion[] = SAMPLE_QUESTIONS.slice(0, 5).map((q) => ({
-      id: q.id,
-      question: q.question,
-      option_a: q.option_a,
-      option_b: q.option_b,
-      option_c: q.option_c,
-      option_d: q.option_d,
-      topic: q.topic,
-      difficulty: q.difficulty,
-    }));
-
-    return {
-      attemptId,
-      status: 'in_progress',
-      startedAt: new Date().toISOString(),
-      durationSeconds: 300,
-      remainingSeconds: 280,
-      questions,
-      existingAnswers: {},
-    };
+    const res = await fetch(`${API_BASE}/quiz/attempt/${attemptId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Quiz attempt not found');
+    }
+    return res.json();
   },
 
   // Autosave answer
@@ -163,55 +130,16 @@ export const api = {
 
   // Submit quiz
   async submitQuiz(attemptId: string, answers?: Record<string, OptionLetter>): Promise<QuizResultPayload> {
-    try {
-      const res = await fetch(`${API_BASE}/quiz/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ attemptId, answers }),
-      });
-      if (res.ok) return await res.json();
-    } catch {}
-
-    const ans = answers || {};
-    let score = 0;
-    const questions = SAMPLE_QUESTIONS.slice(0, 5);
-    const questionsList = questions.map((q) => {
-      const userOption = ans[q.id] || null;
-      const isCorrect = userOption === q.correct_answer;
-      if (isCorrect) score += 1;
-      return {
-        questionId: q.id,
-        question: q.question,
-        optionA: q.option_a,
-        optionB: q.option_b,
-        optionC: q.option_c,
-        optionD: q.option_d,
-        selectedOption: userOption,
-        correctAnswer: q.correct_answer,
-        isCorrect,
-        explanation: q.explanation,
-        topic: q.topic,
-      };
+    const res = await fetch(`${API_BASE}/quiz/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attemptId, answers }),
     });
-
-    return {
-      attemptId,
-      score,
-      totalQuestions: 5,
-      percentage: Math.round((score / 5) * 100),
-      durationTakenSeconds: 65,
-      participant: {
-        fullName: 'Innovit Participant',
-        collegeName: 'Gyan Sagar College of Engineering',
-      },
-      event: {
-        eventName: 'Innovit AI Challenge Demo',
-        collegeName: 'Gyan Sagar College of Engineering',
-        eventCode: 'DEMO2026',
-        leaderboardEnabled: true,
-      },
-      questions: questionsList,
-    };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to submit quiz. Your details were not saved.');
+    }
+    return res.json();
   },
 
   // Get result
@@ -315,6 +243,8 @@ export const api = {
       adminUser: { email: string; name: string; picture?: string };
       sheetsConfigured: boolean;
       spreadsheetUrl?: string;
+      studentsSynced?: number;
+      rosterMessage?: string;
     }> {
       const res = await fetch(`${API_BASE}/admin/google-login`, {
         method: 'POST',
@@ -374,45 +304,25 @@ export const api = {
     },
 
     async getStats(token: string): Promise<AdminStats> {
-      try {
-        const res = await fetch(`${API_BASE}/admin/stats`, {
-          headers: { 'x-admin-token': token },
-        });
-        if (res.ok) return await res.json();
-      } catch {}
-      return {
-        totalParticipants: 0,
-        completedAttempts: 0,
-        activeAttempts: 0,
-        averageScore: 0,
-        highestScore: 0,
-        totalEvents: 1,
-        totalQuestions: 15,
-      };
+      const res = await fetch(`${API_BASE}/admin/stats`, {
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to load admin stats');
+      }
+      return res.json();
     },
 
     async getEvents(token: string) {
-      try {
-        const res = await fetch(`${API_BASE}/admin/events`, {
-          headers: { 'x-admin-token': token },
-        });
-        if (res.ok) return await res.json();
-      } catch {}
-      return [
-        {
-          id: 'event-demo-2026',
-          event_name: 'Innovit AI Challenge Demo',
-          college_name: 'Gyan Sagar College of Engineering',
-          event_code: 'DEMO2026',
-          description: 'Test your understanding of modern Artificial Intelligence, Machine Learning, and Generative models in 5 quick questions.',
-          duration_seconds: 300,
-          is_active: true,
-          leaderboard_enabled: true,
-          question_ids: ['q-1', 'q-2', 'q-3', 'q-4', 'q-5'],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ];
+      const res = await fetch(`${API_BASE}/admin/events`, {
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to load events');
+      }
+      return res.json();
     },
 
     async createEvent(token: string, eventData: any) {
@@ -457,17 +367,15 @@ export const api = {
     },
 
     async getQuestions(token: string, topic?: string) {
-      try {
-        const url = topic ? `${API_BASE}/admin/questions?topic=${encodeURIComponent(topic)}` : `${API_BASE}/admin/questions`;
-        const res = await fetch(url, {
-          headers: { 'x-admin-token': token },
-        });
-        if (res.ok) return await res.json() as Question[];
-      } catch {}
-      if (topic && topic !== 'All') {
-        return SAMPLE_QUESTIONS.filter((q) => q.topic.toLowerCase() === topic.toLowerCase());
+      const url = topic ? `${API_BASE}/admin/questions?topic=${encodeURIComponent(topic)}` : `${API_BASE}/admin/questions`;
+      const res = await fetch(url, {
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to load questions');
       }
-      return SAMPLE_QUESTIONS;
+      return await res.json() as Question[];
     },
 
     async createQuestion(token: string, qData: any) {
@@ -512,13 +420,14 @@ export const api = {
     },
 
     async getAttempts(token: string, eventCode: string) {
-      try {
-        const res = await fetch(`${API_BASE}/admin/attempts/${encodeURIComponent(eventCode)}`, {
-          headers: { 'x-admin-token': token },
-        });
-        if (res.ok) return await res.json();
-      } catch {}
-      return [];
+      const res = await fetch(`${API_BASE}/admin/attempts/${encodeURIComponent(eventCode)}`, {
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to load student attempts');
+      }
+      return res.json();
     },
 
     async resetAttempt(token: string, attemptId: string) {

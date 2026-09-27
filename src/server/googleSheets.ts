@@ -5,28 +5,51 @@
  * eliminating all raw UUIDs and relational foreign-key complexity.
  */
 
+import { loadPersistedAuth, savePersistedAuth } from './persistedAuth.js';
+
 export interface GoogleSheetsConfig {
   spreadsheetId: string;
   accessToken?: string;
 }
+
+const STUDENT_HEADERS = [
+  '#',
+  'Student Name',
+  'Email',
+  'Mobile',
+  'College',
+  'Branch',
+  'Year',
+  'Score',
+  'Percentage',
+  'Time Taken',
+  'Status',
+  'Submitted At',
+  'Event Code',
+];
 
 export class GoogleSheetsService {
   private spreadsheetId: string;
   private accessToken: string | null = null;
 
   constructor(spreadsheetId?: string) {
+    const saved = loadPersistedAuth();
     this.spreadsheetId =
       spreadsheetId ||
+      saved.spreadsheetId ||
       process.env.GOOGLE_SHEET_ID ||
       '1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk';
+    this.accessToken = saved.googleAccessToken || process.env.GOOGLE_SHEETS_ACCESS_TOKEN || null;
   }
 
   public setAccessToken(token: string) {
     this.accessToken = token;
+    savePersistedAuth({ googleAccessToken: token, spreadsheetId: this.spreadsheetId });
   }
 
   public setSpreadsheetId(id: string) {
     this.spreadsheetId = id;
+    savePersistedAuth({ spreadsheetId: id, googleAccessToken: this.accessToken || undefined });
   }
 
   public isConfigured(): boolean {
@@ -47,21 +70,7 @@ export class GoogleSheetsService {
 
     try {
       const headersMap: Record<string, string[]> = {
-        Participants: [
-          '#',
-          'Student Name',
-          'Email',
-          'Mobile',
-          'College',
-          'Branch',
-          'Year',
-          'Score',
-          'Percentage',
-          'Time Taken',
-          'Status',
-          'Submitted At',
-          'Event Code',
-        ],
+        Participants: STUDENT_HEADERS,
         Leaderboard: [
           'Rank',
           'Student Name',
@@ -93,18 +102,10 @@ export class GoogleSheetsService {
           'Status',
           'Created At',
         ],
-        Attempts: [
-          '#',
-          'Student Name',
-          'College',
-          'Score',
-          'Percentage',
-          'Time Taken',
-          'Status',
-          'Submitted At',
-          'Event Code',
-        ],
+        Attempts: STUDENT_HEADERS,
       };
+
+      await this.ensureTabsExist(Object.keys(headersMap));
 
       for (const [sheetName, headers] of Object.entries(headersMap)) {
         await this.updateRange(`${sheetName}!A1:Z1`, [headers]).catch(async () => {
@@ -183,6 +184,68 @@ export class GoogleSheetsService {
     }
 
     return res.json();
+  }
+
+  private async ensureTabsExist(titles: string[]): Promise<void> {
+    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(this.spreadsheetId)}`;
+    const metaRes = await fetch(metaUrl, {
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+    });
+    if (!metaRes.ok) {
+      const err = await metaRes.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Cannot open the spreadsheet. Check the ID and that this Google account can edit it.');
+    }
+    const meta = await metaRes.json();
+    const existing = new Set((meta.sheets || []).map((s: any) => s.properties?.title || ''));
+    const missing = titles.filter((title) => !existing.has(title));
+    if (missing.length === 0) return;
+
+    const requests = missing.map((title) => ({
+      addSheet: {
+        properties: {
+          title,
+          gridProperties: { frozenRowCount: 1 },
+        },
+      },
+    }));
+    const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(this.spreadsheetId)}:batchUpdate`;
+    const batchRes = await fetch(batchUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ requests }),
+    });
+    if (!batchRes.ok) {
+      const err = await batchRes.json().catch(() => ({}));
+      throw new Error(err.error?.message || 'Failed to create sheet tabs');
+    }
+  }
+
+  private async clearRange(range: string): Promise<void> {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
+      this.spreadsheetId,
+    )}/values/${encodeURIComponent(range)}:clear`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Failed to clear ${range}`);
+    }
+  }
+
+  /** Replace every data row under the header so student details stay on row 2, not buried by append. */
+  private async replaceDataRows(sheetName: string, rows: any[][]): Promise<void> {
+    await this.clearRange(`${sheetName}!A2:Z5000`);
+    if (!rows.length) return;
+    await this.updateRange(`${sheetName}!A2`, rows, 'RAW');
   }
 
   /**
@@ -317,7 +380,7 @@ export class GoogleSheetsService {
     participants: any[];
     quiz_attempts: any[];
     attempt_answers: any[];
-  }): Promise<{ success: boolean; message: string; rowsSynced: number }> {
+  }): Promise<{ success: boolean; message: string; rowsSynced: number; studentsSynced: number }> {
     if (!this.isConfigured() || !this.accessToken) {
       throw new Error('Google Sheets not connected. Please sign in with Google or connect a Spreadsheet ID.');
     }
@@ -345,44 +408,42 @@ export class GoogleSheetsService {
       }
     };
 
-    // 1. Tab: Participants & Results (All-in-one comprehensive sheet)
-    if (data.participants && data.participants.length > 0) {
-      const participantRows = data.participants.map((p, idx) => {
-        const isEmail = (p.identifier || '').includes('@');
-        const att = (data.quiz_attempts || []).find(
-          (a) => a.participant_id === p.id || a.participantId === p.id,
-        );
-        const ev = (data.events || []).find((e) => e.id === p.event_id);
-        const durationSec = att?.duration_taken_seconds || att?.durationTakenSeconds || 0;
-        const durText = formatDuration(durationSec);
-        const dateText = formatDate(att?.completed_at || att?.started_at || p.created_at);
+    // 1. Tab: Participants — one row per student with contact details and score
+    const participantRows = (data.participants || []).map((p, idx) => {
+      const isEmail = (p.identifier || '').includes('@');
+      const att = (data.quiz_attempts || []).find(
+        (a) => a.participant_id === p.id || a.participantId === p.id,
+      );
+      const ev = (data.events || []).find((e) => e.id === p.event_id || e.id === p.eventId);
+      const durationSec = att?.duration_taken_seconds || att?.durationTakenSeconds || 0;
+      const durText = formatDuration(durationSec);
+      const dateText = formatDate(att?.completed_at || att?.started_at || p.created_at);
 
-        const scoreText = att
-          ? (att.status === 'completed' ? `${att.score} / ${att.total_questions || 5}` : 'In Progress')
-          : 'Registered';
-        const pctText = att && att.status === 'completed' ? `${att.percentage}%` : '-';
-        const statusText = att?.status === 'completed' ? 'Completed' : (att ? 'In Progress' : 'Registered');
+      const scoreText = att
+        ? (att.status === 'completed' ? `${att.score} / ${att.total_questions || 5}` : 'In Progress')
+        : 'Registered';
+      const pctText = att && att.status === 'completed' ? `${att.percentage}%` : '-';
+      const statusText = att?.status === 'completed' ? 'Completed' : (att ? 'In Progress' : 'Registered');
 
-        return [
-          idx + 1,
-          p.full_name || p.name || 'Student',
-          isEmail ? p.identifier : (p.email || '-'),
-          isEmail ? (p.mobile || '-') : p.identifier,
-          p.college_name || p.college || 'Engineering College',
-          p.branch || '-',
-          p.year || '-',
-          scoreText,
-          pctText,
-          durText,
-          statusText,
-          dateText,
-          ev?.event_code || p.event_code || 'DEMO2026',
-        ];
-      });
-
-      await this.appendRows('Participants!A:M', participantRows);
-      totalRows += participantRows.length;
-    }
+      return [
+        idx + 1,
+        p.full_name || p.name || 'Student',
+        isEmail ? p.identifier : (p.email || '-'),
+        isEmail ? (p.mobile || '-') : (p.identifier || '-'),
+        p.college_name || p.college || 'Engineering College',
+        p.branch || '-',
+        p.year || '-',
+        scoreText,
+        pctText,
+        durText,
+        statusText,
+        dateText,
+        ev?.event_code || p.event_code || 'DEMO2026',
+      ];
+    });
+    await this.replaceDataRows('Participants', participantRows);
+    await this.replaceDataRows('Attempts', participantRows);
+    totalRows += participantRows.length;
 
     // 2. Tab: Leaderboard
     const completedAttempts = (data.quiz_attempts || [])
@@ -392,65 +453,63 @@ export class GoogleSheetsService {
         return (a.duration_taken_seconds || 999) - (b.duration_taken_seconds || 999);
       });
 
-    if (completedAttempts.length > 0) {
-      const leaderboardRows = completedAttempts.map((a, idx) => {
-        const p = (data.participants || []).find((part) => part.id === a.participant_id);
-        const ev = (data.events || []).find((e) => e.id === a.event_id);
-        const durationSec = a.duration_taken_seconds || 0;
-        const durText = formatDuration(durationSec);
-        const dateText = formatDate(a.completed_at);
+    const leaderboardRows = completedAttempts.map((a, idx) => {
+      const p = (data.participants || []).find((part) => part.id === a.participant_id);
+      const ev = (data.events || []).find((e) => e.id === a.event_id);
+      const durationSec = a.duration_taken_seconds || 0;
+      const durText = formatDuration(durationSec);
+      const dateText = formatDate(a.completed_at);
 
-        return [
-          idx + 1,
-          p ? (p.full_name || p.name) : 'Student',
-          p ? (p.college_name || p.college) : 'Engineering College',
-          p?.branch || '-',
-          `${a.score} / ${a.total_questions || 5}`,
-          `${a.percentage}%`,
-          durText,
-          dateText,
-          ev?.event_code || 'DEMO2026',
-        ];
-      });
-      await this.appendRows('Leaderboard!A:I', leaderboardRows).catch(() => {});
-    }
+      return [
+        idx + 1,
+        p ? (p.full_name || p.name) : 'Student',
+        p ? (p.college_name || p.college) : 'Engineering College',
+        p?.branch || '-',
+        `${a.score} / ${a.total_questions || 5}`,
+        `${a.percentage}%`,
+        durText,
+        dateText,
+        ev?.event_code || 'DEMO2026',
+      ];
+    });
+    await this.replaceDataRows('Leaderboard', leaderboardRows);
 
     // 3. Tab: Questions
-    if (data.questions && data.questions.length > 0) {
-      const questionRows = data.questions.map((q, idx) => [
-        idx + 1,
-        q.question || '',
-        q.option_a || '',
-        q.option_b || '',
-        q.option_c || '',
-        q.option_d || '',
-        q.correct_answer ? `Option ${q.correct_answer}` : '',
-        q.explanation || '',
-        q.topic || 'AI & Engineering',
-      ]);
-      await this.appendRows('Questions!A:I', questionRows);
-      totalRows += questionRows.length;
-    }
+    const questionRows = (data.questions || []).map((q, idx) => [
+      idx + 1,
+      q.question || '',
+      q.option_a || '',
+      q.option_b || '',
+      q.option_c || '',
+      q.option_d || '',
+      q.correct_answer ? `Option ${q.correct_answer}` : '',
+      q.explanation || '',
+      q.topic || 'AI & Engineering',
+    ]);
+    await this.replaceDataRows('Questions', questionRows);
+    totalRows += questionRows.length;
 
     // 4. Tab: Events
-    if (data.events && data.events.length > 0) {
-      const eventRows = data.events.map((e, idx) => [
-        idx + 1,
-        e.event_code || '',
-        e.event_name || '',
-        e.college_name || '',
-        `${Math.round((e.duration_seconds || 300) / 60)} Minutes`,
-        e.is_active ? 'Active' : 'Inactive',
-        formatDate(e.created_at),
-      ]);
-      await this.appendRows('Events!A:G', eventRows);
-      totalRows += eventRows.length;
-    }
+    const eventRows = (data.events || []).map((e, idx) => [
+      idx + 1,
+      e.event_code || '',
+      e.event_name || '',
+      e.college_name || '',
+      `${Math.round((e.duration_seconds || 300) / 60)} Minutes`,
+      e.is_active ? 'Active' : 'Inactive',
+      formatDate(e.created_at),
+    ]);
+    await this.replaceDataRows('Events', eventRows);
+    totalRows += eventRows.length;
 
+    const studentCount = participantRows.length;
     return {
       success: true,
-      message: `Successfully synchronized ${totalRows} records! Open your sheet to see participants with their live quiz scores and rankings.`,
+      message: studentCount > 0
+        ? `Saved ${studentCount} student record${studentCount === 1 ? '' : 's'} to Google Sheets, including name, email or mobile, college, branch, year, and score.`
+        : 'Google Sheets updated, but no quiz participants are saved on the server yet.',
       rowsSynced: totalRows,
+      studentsSynced: studentCount,
     };
   }
 }

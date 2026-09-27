@@ -6,3 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
+data/google_sheets_session.json
