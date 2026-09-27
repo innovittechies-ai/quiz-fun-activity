@@ -46,10 +46,15 @@ export const initAuth = (
 
 export const requestGoogleSheetsTokenViaGIS = (): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const clientId =
+    const envVal =
       (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
       (import.meta as any).env?.ViteGoogleClientId ||
-      firebaseConfig.oAuthClientId;
+      '';
+
+    const clientId =
+      envVal && !envVal.startsWith('37083526845')
+        ? envVal
+        : firebaseConfig.oAuthClientId;
 
     if (!clientId) {
       reject(new Error('Google Client ID not configured.'));

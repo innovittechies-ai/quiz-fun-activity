@@ -2,13 +2,20 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import firebaseConfig from './firebase-applet-config.json';
 
 export default defineConfig(() => {
-  const googleClientId =
+  const envVal =
     process.env.ViteGoogleClientId ||
     process.env.VITE_GOOGLE_CLIENT_ID ||
     process.env.GOOGLE_CLIENT_ID ||
     '';
+
+  // If env variable has the old deleted client ID or is empty, use the active provisioned client ID
+  const googleClientId =
+    envVal && !envVal.startsWith('37083526845')
+      ? envVal
+      : firebaseConfig.oAuthClientId;
 
   return {
     plugins: [react(), tailwindcss()],

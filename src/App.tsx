@@ -8,6 +8,7 @@ import { QuizResult } from './components/QuizResult.js';
 import { Leaderboard } from './components/Leaderboard.js';
 import { ProjectorView } from './components/ProjectorView.js';
 import { AdminPanel } from './components/AdminPanel.js';
+import QRCode from 'qrcode';
 import {
   Sparkles,
   School,
@@ -19,6 +20,11 @@ import {
   Clock,
   Flame,
   Award,
+  QrCode,
+  Copy,
+  Check,
+  ExternalLink,
+  Maximize,
 } from 'lucide-react';
 
 export default function App() {
@@ -42,6 +48,35 @@ export default function App() {
 
   // Code input on Home screen
   const [homeCodeInput, setHomeCodeInput] = useState('');
+
+  // Landing Page QR Code State
+  const [landingQrUrl, setLandingQrUrl] = useState<string>('');
+  const [landingCopied, setLandingCopied] = useState<boolean>(false);
+
+  const effectiveLandingCode = (homeCodeInput.trim() || activeEventCode || 'DEMO2026').toUpperCase();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const targetUrl = `${window.location.origin}/quiz/${effectiveLandingCode}`;
+    QRCode.toDataURL(targetUrl, {
+      width: 440,
+      margin: 2,
+      color: {
+        dark: '#030712',
+        light: '#FFFFFF',
+      },
+      errorCorrectionLevel: 'H',
+    })
+      .then((url) => setLandingQrUrl(url))
+      .catch((err) => console.error('Error generating landing QR:', err));
+  }, [effectiveLandingCode]);
+
+  const handleCopyLandingLink = () => {
+    const url = `${window.location.origin}/quiz/${effectiveLandingCode}`;
+    navigator.clipboard.writeText(url);
+    setLandingCopied(true);
+    setTimeout(() => setLandingCopied(false), 2500);
+  };
 
   // Parse path from window.location
   const parseRoute = useCallback(() => {
@@ -312,6 +347,95 @@ export default function App() {
                     5 humorous, technically meaningful AI questions &bull; 5-minute server countdown &bull; Instant live leaderboard.
                   </span>
                 </p>
+
+                {/* HERO QR CODE & FAST SCAN JOIN */}
+                <div className="max-w-2xl mx-auto mb-8 p-6 rounded-3xl bg-slate-900/90 border border-indigo-500/40 shadow-2xl backdrop-blur-md relative overflow-hidden">
+                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                  <div className="flex flex-col md:flex-row items-center gap-6">
+                    {/* QR Code Container */}
+                    <div className="shrink-0 flex flex-col items-center">
+                      <div className="relative group p-3.5 bg-white rounded-2xl shadow-xl shadow-indigo-950/50 border-2 border-indigo-400/40">
+                        {landingQrUrl ? (
+                          <img
+                            src={landingQrUrl}
+                            alt={`Join Quiz QR Code for ${effectiveLandingCode}`}
+                            className="w-48 h-48 sm:w-52 sm:h-52 object-contain rounded-lg"
+                          />
+                        ) : (
+                          <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center bg-slate-100 rounded-lg">
+                            <QrCode className="w-12 h-12 text-slate-400 animate-pulse" />
+                          </div>
+                        )}
+                        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-md border border-indigo-400/50 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          Scan with Mobile
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* QR Details & Action Controls */}
+                    <div className="flex-1 text-center md:text-left space-y-3">
+                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
+                          {effectiveLandingCode}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                          Active Event
+                        </span>
+                      </div>
+
+                      <h3 className="text-xl font-black text-white">
+                        Scan with Phone Camera to Start
+                      </h3>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Point your phone camera at this QR code to open the registration form and start the 5-minute timed challenge instantly.
+                      </p>
+
+                      {/* Quick Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => navigate('quiz', effectiveLandingCode)}
+                          className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer transition-all"
+                        >
+                          <span>Start on this Device</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCopyLandingLink}
+                          className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          {landingCopied ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400">Link Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Copy Link</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate('qr', effectiveLandingCode)}
+                          className="px-3.5 py-2.5 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                          title="Fullscreen Projector Mode for Stage"
+                        >
+                          <Tv className="w-3.5 h-3.5" />
+                          <span>Auditorium Projector</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Event Code Form */}
                 <form
