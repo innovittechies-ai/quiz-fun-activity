@@ -196,60 +196,30 @@ export const api = {
 
   // Admin APIs
   admin: {
-    async login(password: string, spreadsheetId?: string): Promise<{
+    async login(password: string): Promise<{
       token: string;
       adminUser: { email: string; name: string };
-      sheetsConfigured: boolean;
-      spreadsheetUrl?: string;
     }> {
-      try {
-        const res = await fetch(`${API_BASE}/admin/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password, spreadsheetId }),
-        });
-        if (res.ok) {
-          return await res.json();
-        }
-        if (res.status === 404 && password === 'innovit2026') {
-          return {
-            token: 'innovit2026',
-            adminUser: { email: 'innovit.techies@gmail.com', name: 'Innovit Admin' },
-            sheetsConfigured: Boolean(spreadsheetId),
-            spreadsheetUrl: spreadsheetId
-              ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
-              : 'https://docs.google.com/spreadsheets/d/1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk/edit',
-          };
-        }
+      const res = await fetch(`${API_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Invalid admin credentials');
-      } catch (err: any) {
-        if (password === 'innovit2026') {
-          return {
-            token: 'innovit2026',
-            adminUser: { email: 'innovit.techies@gmail.com', name: 'Innovit Admin' },
-            sheetsConfigured: Boolean(spreadsheetId),
-            spreadsheetUrl: spreadsheetId
-              ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`
-              : 'https://docs.google.com/spreadsheets/d/1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk/edit',
-          };
-        }
-        throw err;
       }
+      return res.json();
     },
 
-    async googleLogin(accessToken: string, spreadsheetId?: string): Promise<{
+    async googleLogin(accessToken: string): Promise<{
       token: string;
       adminUser: { email: string; name: string; picture?: string };
-      sheetsConfigured: boolean;
-      spreadsheetUrl?: string;
-      studentsSynced?: number;
-      rosterMessage?: string;
     }> {
       const res = await fetch(`${API_BASE}/admin/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken, spreadsheetId }),
+        body: JSON.stringify({ accessToken }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -258,50 +228,6 @@ export const api = {
       return res.json();
     },
 
-    async configureSheets(token: string, spreadsheetId: string, accessToken?: string) {
-      const res = await fetch(`${API_BASE}/admin/sheets/config`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': token,
-        },
-        body: JSON.stringify({ spreadsheetId, accessToken }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to configure Google Sheets');
-      }
-      return res.json();
-    },
-
-    async getSheetsStatus(token: string) {
-      const res = await fetch(`${API_BASE}/admin/sheets/status`, {
-        headers: { 'x-admin-token': token },
-      });
-      if (!res.ok) throw new Error('Failed to get Google Sheets status');
-      return res.json();
-    },
-
-    async syncAllSheets(
-      token: string,
-      googleToken?: string,
-      spreadsheetId?: string
-    ): Promise<{ success: boolean; message: string; rowsSynced: number }> {
-      const res = await fetch(`${API_BASE}/admin/sheets/sync-all`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': token,
-          ...(googleToken ? { 'x-google-access-token': googleToken } : {}),
-        },
-        body: JSON.stringify({ accessToken: googleToken, spreadsheetId }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to sync database to Google Sheets');
-      }
-      return res.json();
-    },
 
     async getStats(token: string): Promise<AdminStats> {
       const res = await fetch(`${API_BASE}/admin/stats`, {

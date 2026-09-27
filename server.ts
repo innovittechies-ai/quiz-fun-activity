@@ -3,8 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { db } from './src/server/db.js';
-import { googleSheetsService } from './src/server/googleSheets.js';
-import { loadPersistedAuth, savePersistedAuth, AdminSession } from './src/server/persistedAuth.js';
 
 dotenv.config();
 
@@ -21,28 +19,9 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'innovit.techies@gmail.com')
 
 app.use(express.json());
 
-// Verified Google admin sessions. Restored from disk so a server restart does not hide student records.
-const verifiedGoogleAdminTokens = new Map<string, AdminSession>();
-
-function persistAdminSessions() {
-  const adminSessions: Record<string, AdminSession> = {};
-  for (const [token, session] of verifiedGoogleAdminTokens) {
-    adminSessions[token] = session;
-  }
-  savePersistedAuth({ adminSessions });
-}
-
-function hydrateAdminSessions() {
-  const saved = loadPersistedAuth();
-  const now = Date.now();
-  for (const [token, session] of Object.entries(saved.adminSessions || {})) {
-    if (session?.expiresAt > now && session.googleAccessToken) {
-      verifiedGoogleAdminTokens.set(token, session);
-    }
-  }
-}
-
-hydrateAdminSessions();
+// Verified Google admin sessions (in-memory per instance). The emergency passkey
+// works on every instance without a session, so admin auth still functions across Vercel.
+const verifiedGoogleAdminTokens = new Map<string, { email: string; expiresAt: number }>();
 
 // Request logger for debugging live events
 app.use((req, res, next) => {
@@ -86,9 +65,9 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 // Get Event public info
-app.get('/api/events/:code', (req: Request, res: Response) => {
+app.get('/api/events/:code', async (req: Request, res: Response) => {
   try {
-    const event = db.getEventByCode(req.params.code);
+    const event = await db.getEventByCode(req.params.code);
     if (!event) {
       res.status(404).json({ error: `Event code '${req.params.code}' was not found.` });
       return;
@@ -110,22 +89,9 @@ app.get('/api/events/:code', (req: Request, res: Response) => {
   }
 });
 
-// Helper: inject the most recently verified Google admin token into googleSheetsService
-function injectLatestGoogleToken() {
-  const now = Date.now();
-  for (const [, session] of verifiedGoogleAdminTokens) {
-    if (session.expiresAt > now && session.googleAccessToken) {
-      googleSheetsService.setAccessToken(session.googleAccessToken);
-      return;
-    }
-  }
-}
-
 // Student registration and quiz start / resume
-app.post('/api/quiz/register', (req: Request, res: Response) => {
+app.post('/api/quiz/register', async (req: Request, res: Response) => {
   try {
-    injectLatestGoogleToken();
-
     const { eventCode, fullName, identifier, collegeName, branch, year } = req.body;
 
     if (!eventCode || !fullName || !identifier) {
@@ -133,7 +99,7 @@ app.post('/api/quiz/register', (req: Request, res: Response) => {
       return;
     }
 
-    const result = db.registerStudentAndStartQuiz({
+    const result = await db.registerStudentAndStartQuiz({
       eventCode,
       fullName,
       identifier,
@@ -168,15 +134,15 @@ app.post('/api/quiz/register', (req: Request, res: Response) => {
 });
 
 // Check attempt status and remaining timer
-app.get('/api/quiz/attempt/:attemptId', (req: Request, res: Response) => {
+app.get('/api/quiz/attempt/:attemptId', async (req: Request, res: Response) => {
   try {
-    const attempt = db.getAttemptById(req.params.attemptId);
+    const attempt = await db.getAttemptById(req.params.attemptId);
     if (!attempt) {
       res.status(404).json({ error: 'Attempt not found' });
       return;
     }
 
-    const event = db.getEventById(attempt.event_id);
+    const event = await db.getEventById(attempt.event_id);
     if (!event) {
       res.status(404).json({ error: 'Event not found' });
       return;
@@ -189,7 +155,7 @@ app.get('/api/quiz/attempt/:attemptId', (req: Request, res: Response) => {
 
     if (attempt.status === 'in_progress' && remainingSeconds <= 0) {
       // Auto-submit expired attempt on server
-      const result = db.submitAttempt(attempt.id);
+      const result = await db.submitAttempt(attempt.id);
       res.json({
         status: 'completed',
         expired: true,
@@ -199,8 +165,8 @@ app.get('/api/quiz/attempt/:attemptId', (req: Request, res: Response) => {
       return;
     }
 
-    const answers = db.getAttemptAnswersMap(attempt.id);
-    const questions = db.getClientQuestionsForEvent(event);
+    const answers = await db.getAttemptAnswersMap(attempt.id);
+    const questions = await db.getClientQuestionsForEvent(event);
 
     res.json({
       attemptId: attempt.id,
@@ -217,7 +183,7 @@ app.get('/api/quiz/attempt/:attemptId', (req: Request, res: Response) => {
 });
 
 // Auto-save student's answer per question
-app.post('/api/quiz/answer', (req: Request, res: Response) => {
+app.post('/api/quiz/answer', async (req: Request, res: Response) => {
   try {
     const { attemptId, questionId, selectedOption } = req.body;
     if (!attemptId || !questionId || !selectedOption) {
@@ -225,7 +191,7 @@ app.post('/api/quiz/answer', (req: Request, res: Response) => {
       return;
     }
 
-    db.saveAttemptAnswer(attemptId, questionId, selectedOption);
+    await db.saveAttemptAnswer(attemptId, questionId, selectedOption);
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to record answer' });
@@ -233,17 +199,15 @@ app.post('/api/quiz/answer', (req: Request, res: Response) => {
 });
 
 // Submit quiz for server-side score calculation
-app.post('/api/quiz/submit', (req: Request, res: Response) => {
+app.post('/api/quiz/submit', async (req: Request, res: Response) => {
   try {
-    injectLatestGoogleToken();
-
     const { attemptId, answers } = req.body;
     if (!attemptId) {
       res.status(400).json({ error: 'attemptId is required' });
       return;
     }
 
-    const result = db.submitAttempt(attemptId, answers);
+    const result = await db.submitAttempt(attemptId, answers);
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Failed to submit quiz' });
@@ -251,9 +215,9 @@ app.post('/api/quiz/submit', (req: Request, res: Response) => {
 });
 
 // Fetch past quiz result
-app.get('/api/quiz/result/:attemptId', (req: Request, res: Response) => {
+app.get('/api/quiz/result/:attemptId', async (req: Request, res: Response) => {
   try {
-    const result = db.getAttemptResult(req.params.attemptId);
+    const result = await db.getAttemptResult(req.params.attemptId);
     if (!result) {
       res.status(404).json({ error: 'Quiz result not found or quiz is still in progress' });
       return;
@@ -265,9 +229,9 @@ app.get('/api/quiz/result/:attemptId', (req: Request, res: Response) => {
 });
 
 // Public Leaderboard for an Event (anonymized: no emails or mobile numbers)
-app.get('/api/leaderboard/:eventCode', (req: Request, res: Response) => {
+app.get('/api/leaderboard/:eventCode', async (req: Request, res: Response) => {
   try {
-    const data = db.getLeaderboard(req.params.eventCode);
+    const data = await db.getLeaderboard(req.params.eventCode);
     res.json(data);
   } catch (err: any) {
     res.status(404).json({ error: err.message || 'Leaderboard not found' });
@@ -281,7 +245,7 @@ app.get('/api/leaderboard/:eventCode', (req: Request, res: Response) => {
 // Google Admin Login via OAuth access token / id token
 app.post('/api/admin/google-login', async (req: Request, res: Response) => {
   try {
-    const { accessToken, spreadsheetId } = req.body;
+    const { accessToken } = req.body;
     if (!accessToken) {
       res.status(400).json({ error: 'OAuth Access Token is required.' });
       return;
@@ -313,28 +277,12 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
       return;
     }
 
-    // Attach token to googleSheetsService for live Google Sheets reads and writes
-    googleSheetsService.setAccessToken(accessToken);
-    if (spreadsheetId) {
-      googleSheetsService.setSpreadsheetId(spreadsheetId);
-    }
-
-    // Generate secure session token
+    // Generate secure session token (24h)
     const sessionToken = `g_admin_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-    // Valid for 24 hours
     verifiedGoogleAdminTokens.set(sessionToken, {
       email: userEmail,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      googleAccessToken: accessToken,
     });
-    persistAdminSessions();
-
-    let rosterSync: { studentsSynced?: number; message?: string } | null = null;
-    try {
-      rosterSync = await googleSheetsService.syncAllData(db.getRawData());
-    } catch (syncErr: any) {
-      console.warn('Roster sync after Google login:', syncErr?.message || syncErr);
-    }
 
     res.json({
       success: true,
@@ -344,10 +292,6 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
         name: userInfo.name || 'Admin',
         picture: userInfo.picture,
       },
-      sheetsConfigured: googleSheetsService.isConfigured(),
-      spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
-      studentsSynced: rosterSync?.studentsSynced ?? 0,
-      rosterMessage: rosterSync?.message,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Google authentication failed' });
@@ -356,87 +300,22 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
 
 // Admin Passkey Login (Fallback)
 app.post('/api/admin/login', (req: Request, res: Response) => {
-  const { password, spreadsheetId, accessToken } = req.body;
+  const { password } = req.body;
   if (!password || password !== ADMIN_PASSWORD) {
     res.status(401).json({ error: 'Invalid admin credentials' });
     return;
-  }
-  if (accessToken) {
-    googleSheetsService.setAccessToken(accessToken);
-  }
-  if (spreadsheetId) {
-    googleSheetsService.setSpreadsheetId(spreadsheetId);
   }
   res.json({
     success: true,
     token: ADMIN_PASSWORD,
     adminUser: { email: 'innovit.admin@innovit.org', name: 'Innovit Admin' },
-    sheetsConfigured: googleSheetsService.isConfigured(),
-    spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
   });
-});
-
-// Configure or test Google Spreadsheet ID
-app.post('/api/admin/sheets/config', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const { spreadsheetId, accessToken } = req.body;
-    if (spreadsheetId) {
-      googleSheetsService.setSpreadsheetId(spreadsheetId.trim());
-    }
-    if (accessToken) {
-      googleSheetsService.setAccessToken(accessToken.trim());
-    }
-
-    const initResult = await googleSheetsService.ensureSheetStructure();
-    const rosterSync = await googleSheetsService.syncAllData(db.getRawData());
-
-    res.json({
-      success: true,
-      spreadsheetId: process.env.GOOGLE_SHEET_ID || spreadsheetId,
-      spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
-      isConfigured: googleSheetsService.isConfigured(),
-      structureStatus: initResult,
-      studentsSynced: rosterSync.studentsSynced,
-      rosterMessage: rosterSync.message,
-    });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// Get current Google Sheets connection info
-app.get('/api/admin/sheets/status', requireAdmin, (req: Request, res: Response) => {
-  res.json({
-    isConfigured: googleSheetsService.isConfigured(),
-    spreadsheetUrl: googleSheetsService.getSpreadsheetUrl(),
-    adminEmails: ADMIN_EMAILS,
-  });
-});
-
-// Full database sync to all 5 Google Sheets tabs
-app.post('/api/admin/sheets/sync-all', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const { accessToken, spreadsheetId } = req.body || {};
-    const headerToken = req.headers['x-google-access-token'] as string;
-    const token = accessToken || headerToken;
-    if (token) {
-      googleSheetsService.setAccessToken(token.trim());
-    }
-    if (spreadsheetId) {
-      googleSheetsService.setSpreadsheetId(spreadsheetId.trim());
-    }
-    const rawData = db.getRawData();
-    const result = await googleSheetsService.syncAllData(rawData);
-    res.json(result);
-  } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Failed to sync database to Google Sheets' });
-  }
 });
 
 // Admin Stats
-app.get('/api/admin/stats', requireAdmin, (req: Request, res: Response) => {
+app.get('/api/admin/stats', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const stats = db.getAdminStats();
+    const stats = await db.getAdminStats();
     res.json(stats);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -444,36 +323,36 @@ app.get('/api/admin/stats', requireAdmin, (req: Request, res: Response) => {
 });
 
 // Admin Events CRUD
-app.get('/api/admin/events', requireAdmin, (req: Request, res: Response) => {
+app.get('/api/admin/events', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const events = db.getAllEvents();
+    const events = await db.getAllEvents();
     res.json(events);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/events', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/events', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const created = db.createEvent(req.body);
+    const created = await db.createEvent(req.body);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.put('/api/admin/events/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/events/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const updated = db.updateEvent(req.params.id, req.body);
+    const updated = await db.updateEvent(req.params.id, req.body);
     res.json(updated);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.delete('/api/admin/events/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/events/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    db.deleteEvent(req.params.id);
+    await db.deleteEvent(req.params.id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -481,38 +360,38 @@ app.delete('/api/admin/events/:id', requireAdmin, (req: Request, res: Response) 
 });
 
 // Admin Questions CRUD
-app.get('/api/admin/questions', requireAdmin, (req: Request, res: Response) => {
+app.get('/api/admin/questions', requireAdmin, async (req: Request, res: Response) => {
   try {
     const topic = req.query.topic as string | undefined;
     const difficulty = req.query.difficulty as string | undefined;
-    const questions = db.getAllQuestions({ topic, difficulty });
+    const questions = await db.getAllQuestions({ topic, difficulty });
     res.json(questions);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/admin/questions', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/questions', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const created = db.createQuestion(req.body);
+    const created = await db.createQuestion(req.body);
     res.status(201).json(created);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.put('/api/admin/questions/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/questions/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const updated = db.updateQuestion(req.params.id, req.body);
+    const updated = await db.updateQuestion(req.params.id, req.body);
     res.json(updated);
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.delete('/api/admin/questions/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/questions/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    db.deleteQuestion(req.params.id);
+    await db.deleteQuestion(req.params.id);
     res.json({ success: true });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -520,9 +399,9 @@ app.delete('/api/admin/questions/:id', requireAdmin, (req: Request, res: Respons
 });
 
 // Admin View Attempts for an Event
-app.get('/api/admin/attempts/:eventCode', requireAdmin, (req: Request, res: Response) => {
+app.get('/api/admin/attempts/:eventCode', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const attempts = db.getEventAttemptsDetails(req.params.eventCode);
+    const attempts = await db.getEventAttemptsDetails(req.params.eventCode);
     res.json(attempts);
   } catch (err: any) {
     res.status(404).json({ error: err.message });
@@ -530,9 +409,9 @@ app.get('/api/admin/attempts/:eventCode', requireAdmin, (req: Request, res: Resp
 });
 
 // Admin Reset Attempt
-app.post('/api/admin/attempts/:id/reset', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/attempts/:id/reset', requireAdmin, async (req: Request, res: Response) => {
   try {
-    db.resetAttempt(req.params.id);
+    await db.resetAttempt(req.params.id);
     res.json({ success: true, message: 'Student attempt has been reset successfully.' });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -540,9 +419,9 @@ app.post('/api/admin/attempts/:id/reset', requireAdmin, (req: Request, res: Resp
 });
 
 // Admin Export Event Results to CSV
-app.get('/api/admin/export/:eventCode', requireAdmin, (req: Request, res: Response) => {
+app.get('/api/admin/export/:eventCode', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const csv = db.exportEventCSV(req.params.eventCode);
+    const csv = await db.exportEventCSV(req.params.eventCode);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader(
       'Content-Disposition',

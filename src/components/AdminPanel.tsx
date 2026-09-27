@@ -24,12 +24,10 @@ import {
   BarChart3,
   Layers,
   FileQuestion,
-  FileSpreadsheet,
   Lock,
   LogOut,
 } from 'lucide-react';
 import { googleSignIn, logout as googleSignOut } from '../services/googleAuth.js';
-import { GoogleSheetsClient } from '../services/googleSheetsClient.js';
 
 interface AdminPanelProps {
   onOpenProjector: (code: string) => void;
@@ -49,25 +47,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return null;
     }
   });
-  const [googleAccessToken, setGoogleAccessToken] = useState<string>(() => localStorage.getItem('innovit_google_token') || '');
-  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState<string>(() => {
-    const saved = localStorage.getItem('innovit_sheet_id');
-    if (saved && saved !== '18hg3xBzI57FUl7Cyoo93B0-ybM94pjdEl1C__jKVECg') {
-      return saved;
-    }
-    return '1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk';
-  });
-  const [sheetsConfigured, setSheetsConfigured] = useState<boolean>(false);
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>('');
-  const [isConnectingSheets, setIsConnectingSheets] = useState(false);
   const [showPasskeyInput, setShowPasskeyInput] = useState(false);
 
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Tabs: 'overview' | 'events' | 'questions' | 'participants' | 'sheets'
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants' | 'sheets'>('overview');
+  // Tabs: 'overview' | 'events' | 'questions' | 'participants'
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants'>('overview');
 
   // Data states
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -130,15 +117,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return;
     }
     try {
-      const res = await api.admin.login(pass, spreadsheetIdInput.trim() || undefined);
+      const res = await api.admin.login(pass);
       const tokenVal = typeof res === 'string' ? res : res.token;
       setToken(tokenVal);
       localStorage.setItem('innovit_admin_token', tokenVal);
       const user = res.adminUser || { email: 'innovit.admin@innovit.org', name: 'Innovit Admin' };
       setAdminUser(user);
       localStorage.setItem('innovit_admin_user', JSON.stringify(user));
-      if (res.sheetsConfigured !== undefined) setSheetsConfigured(res.sheetsConfigured);
-      if (res.spreadsheetUrl) setSpreadsheetUrl(res.spreadsheetUrl);
       setPasswordInput('');
       showNotification('Signed in successfully with Admin Passkey');
     } catch (err: any) {
@@ -156,19 +141,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const authResult = await googleSignIn();
       if (!authResult) throw new Error('Google Sign-In was cancelled or failed.');
 
-      const loginRes = await api.admin.googleLogin(authResult.accessToken, spreadsheetIdInput.trim() || undefined);
+      const loginRes = await api.admin.googleLogin(authResult.accessToken);
       setToken(loginRes.token);
       localStorage.setItem('innovit_admin_token', loginRes.token);
       setAdminUser(loginRes.adminUser);
       localStorage.setItem('innovit_admin_user', JSON.stringify(loginRes.adminUser));
-      setGoogleAccessToken(authResult.accessToken);
-      localStorage.setItem('innovit_google_token', authResult.accessToken);
-      setSheetsConfigured(loginRes.sheetsConfigured);
-      if (loginRes.spreadsheetUrl) setSpreadsheetUrl(loginRes.spreadsheetUrl);
 
       showNotification(
-        loginRes.rosterMessage ||
-          `Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`
+        `Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`
       );
     } catch (err: any) {
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
@@ -193,171 +173,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     setToken('');
     setAdminUser(null);
-    setGoogleAccessToken('');
     localStorage.removeItem('innovit_admin_token');
     localStorage.removeItem('innovit_admin_user');
-    localStorage.removeItem('innovit_google_token');
-  };
-
-  // Google Sheets Actions
-  const handleConnectGoogleForSheets = async () => {
-    setIsConnectingSheets(true);
-    try {
-      const authResult = await googleSignIn();
-      if (!authResult) throw new Error('Google Sign-In was cancelled or failed.');
-
-      setGoogleAccessToken(authResult.accessToken);
-      localStorage.setItem('innovit_google_token', authResult.accessToken);
-      if (authResult.user) {
-        const u = {
-          email: authResult.user.email || 'innovit.techies@gmail.com',
-          name: authResult.user.displayName || 'Admin',
-        };
-        setAdminUser(u);
-        localStorage.setItem('innovit_admin_user', JSON.stringify(u));
-      }
-
-      const sId = spreadsheetIdInput.trim();
-      setSheetsConfigured(true);
-      if (sId) {
-        setSpreadsheetUrl(`https://docs.google.com/spreadsheets/d/${sId}/edit`);
-        localStorage.setItem('innovit_sheet_id', sId);
-      }
-
-      showNotification('Google Account authorized successfully! Live Sheets access enabled.');
-
-      if (sId) {
-        try {
-          await GoogleSheetsClient.ensureTabsAndHeaders(sId, authResult.accessToken);
-          if (token) {
-            await api.admin.configureSheets(token, sId, authResult.accessToken);
-          }
-          showNotification('Google Account authorized and all 5 tabs verified in your sheet!');
-        } catch (tabErr: any) {
-          console.warn('Tab init on connect:', tabErr);
-          showNotification(tabErr.message || 'Google authorized, but the sheet tabs could not be updated.', 'error');
-        }
-      }
-    } catch (err: any) {
-      if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
-        showNotification(
-          `Domain "${window.location.hostname}" is not yet in Firebase Authorized domains. See instructions in the Google Sheets tab to whitelist it in 10 seconds!`,
-          'error'
-        );
-      } else {
-        showNotification(err.message || 'Failed to connect Google account', 'error');
-      }
-    } finally {
-      setIsConnectingSheets(false);
-    }
-  };
-
-  const handleInitSheets = async () => {
-    if (!token) return;
-    const sheetId = spreadsheetIdInput.trim();
-    if (!sheetId) {
-      showNotification('Please enter a Google Spreadsheet ID first.', 'error');
-      return;
-    }
-
-    setIsConnectingSheets(true);
-    try {
-      // Always get a fresh token before Sheets operations to avoid expired token errors
-      let freshToken = googleAccessToken;
-      try {
-        const { requestGoogleSheetsTokenViaGIS } = await import('../services/googleAuth.js');
-        freshToken = await requestGoogleSheetsTokenViaGIS();
-        setGoogleAccessToken(freshToken);
-        localStorage.setItem('innovit_google_token', freshToken);
-      } catch {
-        if (!freshToken) {
-          showNotification('Please authorize your Google Account first.', 'error');
-          setIsConnectingSheets(false);
-          return;
-        }
-      }
-
-      const res = await GoogleSheetsClient.ensureTabsAndHeaders(sheetId, freshToken);
-      setSheetsConfigured(true);
-      setSpreadsheetUrl(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`);
-      localStorage.setItem('innovit_sheet_id', sheetId);
-      showNotification(res.message || 'All 5 tabs verified and initialized in your Google Sheet!');
-
-      try {
-        await api.admin.configureSheets(token, sheetId, freshToken);
-      } catch (beErr) {
-        console.warn('Backend configure error:', beErr);
-      }
-    } catch (err: any) {
-      console.warn('Direct init error, falling back to backend:', err);
-      try {
-        const res = await api.admin.configureSheets(token, sheetId, googleAccessToken);
-        setSheetsConfigured(res.isConfigured);
-        if (res.spreadsheetUrl) setSpreadsheetUrl(res.spreadsheetUrl);
-        showNotification('Google Sheets structure initialized! All 5 tabs ready.');
-      } catch (backendErr: any) {
-        showNotification(err.message || backendErr.message || 'Failed to initialize sheets', 'error');
-      }
-    } finally {
-      setIsConnectingSheets(false);
-    }
-  };
-
-  const handleSyncAllToSheets = async () => {
-    if (!token) return;
-    const sheetId = spreadsheetIdInput.trim();
-    if (!sheetId) {
-      showNotification('Please enter a Google Spreadsheet ID first.', 'error');
-      return;
-    }
-
-    setIsConnectingSheets(true);
-    try {
-      // Always get a fresh token to avoid expired token errors
-      let freshToken = googleAccessToken;
-      try {
-        const { requestGoogleSheetsTokenViaGIS } = await import('../services/googleAuth.js');
-        freshToken = await requestGoogleSheetsTokenViaGIS();
-        setGoogleAccessToken(freshToken);
-        localStorage.setItem('innovit_google_token', freshToken);
-      } catch {
-        if (!freshToken) {
-          showNotification('Please authorize your Google Account first.', 'error');
-          setIsConnectingSheets(false);
-          return;
-        }
-      }
-
-      // Load every event's students so name, contact, college, branch, and score are written
-      const eventList = events.length > 0 ? events : await api.admin.getEvents(token);
-      const roster: any[] = [];
-      for (const ev of eventList) {
-        const rows = await api.admin.getAttempts(token, ev.event_code);
-        for (const row of rows || []) {
-          roster.push({ ...row, eventCode: row.eventCode || ev.event_code });
-        }
-      }
-      if (selectedEventCode) {
-        setAttempts(roster.filter((row) => row.eventCode === selectedEventCode));
-      } else {
-        setAttempts(roster);
-      }
-
-      const rawData = { events: eventList, questions, participants: roster, attempts: roster, answers: [] };
-      const directRes = await GoogleSheetsClient.syncAllData(sheetId, freshToken, rawData);
-      setSheetsConfigured(true);
-      showNotification(directRes.message || 'Synced all records directly to Google Sheet!');
-
-      try {
-        await api.admin.syncAllSheets(token, freshToken, sheetId);
-      } catch (bErr) {
-        console.warn('Backend sync response:', bErr);
-      }
-    } catch (err: any) {
-      showNotification(err.message || 'Failed to sync to Google Sheets', 'error');
-    } finally {
-      setIsConnectingSheets(false);
-    }
   };
 
   // Load Admin Data
@@ -642,22 +459,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Primary: Sign in with Google (Recommended) */}
           <div className="space-y-4">
-            <div>
-              <label className="block text-left text-[11px] font-semibold text-slate-400 mb-1">
-                Google Spreadsheet ID (Optional, connect now or later)
-              </label>
-              <input
-                type="text"
-                value={spreadsheetIdInput}
-                onChange={(e) => {
-                  setSpreadsheetIdInput(e.target.value);
-                  localStorage.setItem('innovit_sheet_id', e.target.value.trim());
-                }}
-                placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-
             <button
               type="button"
               onClick={handleGoogleSignIn}
@@ -759,16 +560,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
                 <span>{adminUser.email}</span>
               </span>
-              {sheetsConfigured ? (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold text-[10px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Google Sheets Active
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px]">
-                  Sheets Not Synced Yet
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold text-[10px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                Firestore Connected
+              </span>
             </div>
           )}
         </div>
@@ -859,21 +654,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Participants & Attempts</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('sheets')}
-          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-            activeTab === 'sheets'
-              ? 'bg-slate-800 text-emerald-400 border border-slate-700'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-          <span>Google Sheets Sync</span>
-          {sheetsConfigured && (
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-          )}
         </button>
       </div>
 
@@ -1370,368 +1150,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: GOOGLE SHEETS SYNC & ARCHITECTURE */}
-      {activeTab === 'sheets' && (
-        <div className="space-y-6">
-          {/* Top Control Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </span>
-                <h2 className="text-lg font-bold text-white">Google Sheets Integration</h2>
-                {googleAccessToken ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Write Access Authorized
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-300">
-                    Google Authorization Required
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                Google Sheets serves as your lightweight, zero-maintenance database. Events, questions, students, and quiz attempts are recorded directly in separate tabs.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {spreadsheetUrl && (
-                <a
-                  href={spreadsheetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Open Google Sheet</span>
-                </a>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSyncAllToSheets}
-                disabled={isConnectingSheets}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${isConnectingSheets ? 'animate-spin' : ''}`} />
-                <span>{isConnectingSheets ? 'Syncing...' : 'Sync All Data Now'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Authorization Notice if Logged in via Passkey */}
-          {!googleAccessToken ? (
-            <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-3 shadow-lg">
-              <div className="flex items-start gap-3">
-                <Shield className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <p className="font-bold text-sm text-amber-300">
-                    Step 1: Authorize Google Account to Enable Direct Sheet Writes
-                  </p>
-                  <p className="text-amber-200/90 leading-relaxed text-xs">
-                    You signed in to the admin panel with the passkey (<code className="bg-amber-950 px-1.5 py-0.5 rounded text-amber-300 font-mono">innovit2026</code>). To create tabs and record quiz results into your Google Sheet (<code className="bg-amber-950 px-1.5 py-0.5 rounded text-cyan-300 font-mono">{spreadsheetIdInput}</code>), Google requires write permission from your Google account.
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-amber-500/20 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleConnectGoogleForSheets}
-                  disabled={isConnectingSheets}
-                  className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  <span>{isConnectingSheets ? 'Connecting...' : 'Authorize Google Account (1-Click)'}</span>
-                </button>
-              </div>
-
-              {/* Vercel Domain Whitelist Instructions */}
-              <div className="mt-3 p-3.5 rounded-xl bg-slate-950/80 border border-amber-500/20 text-[11px] space-y-1.5 text-slate-300">
-                <p className="font-semibold text-amber-300 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  If Google popup shows "unauthorized domain" on Vercel:
-                </p>
-                <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                  <li>
-                    Open Firebase Console: <a href="https://console.firebase.google.com/project/gen-lang-client-0149541750/authentication/settings" target="_blank" rel="noopener noreferrer" className="underline text-cyan-400 font-bold">Firebase Authorized Domains Settings</a>
-                  </li>
-                  <li>
-                    Under <strong>Authorized domains</strong>, click <strong>Add domain</strong> and enter: <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300 font-mono">{typeof window !== 'undefined' ? window.location.hostname : 'quiz-fun-activity.vercel.app'}</code>
-                  </li>
-                  <li>Click <strong>Save</strong> and return here to click <strong>Authorize Google Account</strong>!</li>
-                </ol>
-              </div>
-            </div>
-          ) : (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
-              <div className="flex items-center gap-2.5">
-                <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
-                <div>
-                  <p className="font-bold text-sm text-emerald-300">Google Account Connected & Authorized</p>
-                  <p className="text-emerald-200/80 text-xs">Direct read/write access active. All 5 tabs can be created and synced directly.</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleConnectGoogleForSheets}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 transition-colors"
-              >
-                Re-authorize Account
-              </button>
-            </div>
-          )}
-
-          {/* Spreadsheet ID Configuration Card */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
-                <School className="w-4 h-4 text-indigo-400" />
-                Connected Google Spreadsheet
-              </h3>
-              <p className="text-xs text-slate-400">
-                Enter your Google Spreadsheet ID (from your sheet URL: <code className="text-cyan-300">https://docs.google.com/spreadsheets/d/&#123;SPREADSHEET_ID&#125;/edit</code>).
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={spreadsheetIdInput}
-                onChange={(e) => setSpreadsheetIdInput(e.target.value)}
-                placeholder="e.g. 1cvtA3tIAhoT2WdUX0HqkeWW7h9g26GD7BUcvZjLoFKk"
-                className="flex-1 px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <button
-                type="button"
-                onClick={handleInitSheets}
-                disabled={isConnectingSheets || !spreadsheetIdInput.trim()}
-                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/30 cursor-pointer disabled:opacity-50 shrink-0 flex items-center gap-2"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isConnectingSheets ? 'Working...' : 'Verify & Ensure 5 Tabs'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleSyncAllToSheets}
-                disabled={isConnectingSheets || !spreadsheetIdInput.trim()}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 cursor-pointer disabled:opacity-50 shrink-0 flex items-center gap-2"
-              >
-                <RotateCcw className={`w-3.5 h-3.5 ${isConnectingSheets ? 'animate-spin' : ''}`} />
-                <span>Sync All Data Now</span>
-              </button>
-            </div>
-
-            {spreadsheetUrl && (
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs">
-                <span className="text-slate-300 truncate">
-                  Sheet URL: <span className="font-mono text-cyan-400">{spreadsheetUrl}</span>
-                </span>
-                <a
-                  href={spreadsheetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 font-bold shrink-0 flex items-center gap-1.5 transition-colors"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open Sheet in Google</span>
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Step-by-Step Flow */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-3">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              Direct Setup Checklist
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className={`p-3.5 rounded-xl border ${googleAccessToken ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-300'}`}>
-                <div className="font-bold flex items-center gap-1.5 mb-1">
-                  <span>1. Google Authorization</span>
-                  {googleAccessToken && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  {googleAccessToken ? 'Authorized! Your browser can write directly to Google Sheets.' : 'Click "Authorize Google Account" above to grant permission.'}
-                </p>
-              </div>
-
-              <div className={`p-3.5 rounded-xl border ${sheetsConfigured ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' : 'bg-slate-950 border-slate-800 text-slate-300'}`}>
-                <div className="font-bold flex items-center gap-1.5 mb-1">
-                  <span>2. Verify 5 Tabs</span>
-                  {sheetsConfigured && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Click "Verify & Ensure 5 Tabs" to automatically create Events, Questions, Participants, Attempts, and Answers tabs.
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-xl border bg-slate-950 border-slate-800 text-slate-300">
-                <div className="font-bold flex items-center gap-1.5 mb-1">
-                  <span>3. Live Quiz Record</span>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Whenever students submit the quiz, their scores and answers are instantly recorded in the sheet!
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Simple, Human-Readable Google Sheets Structure */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-cyan-400" />
-                Google Sheets Structure (Straightforward &amp; Clean &bull; Zero Raw UUIDs)
-              </h3>
-              <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" />
-                Organized for College Event Faculty &amp; Coordinators
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {/* Sheet 1: Participants & Results */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 shadow-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-emerald-300 font-mono flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    1. Participants &amp; Results
-                  </span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
-                    Primary Tab &bull; 13 Columns
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 mb-2 font-medium">
-                  Complete student details with live quiz scores, percentage, and time taken in one clean row.
-                </p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[10px] text-emerald-300 space-y-0.5">
-                  <div className="text-white font-bold">#, Student Name, Email, Mobile</div>
-                  <div>College, Branch, Year</div>
-                  <div className="text-cyan-300 font-semibold">Score (e.g. 4 / 5), Percentage (80%)</div>
-                  <div>Time Taken (e.g. 1m 45s), Status (Completed)</div>
-                  <div className="text-slate-400">Submitted At, Event Code</div>
-                </div>
-              </div>
-
-              {/* Sheet 2: Leaderboard */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-amber-300 font-mono">2. Leaderboard</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">Ranked leaderboard sorted by highest score &amp; fastest completion.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-amber-300 space-y-0.5">
-                  <div>Rank (1, 2, 3...) &bull; Student Name</div>
-                  <div>College &bull; Branch</div>
-                  <div>Score &bull; Percentage &bull; Time Taken</div>
-                  <div>Completed At &bull; Event Code</div>
-                </div>
-              </div>
-
-              {/* Sheet 3: Questions */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-cyan-300 font-mono">3. Questions</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">MCQ question bank with options, answer &amp; explanation.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>#, Question</div>
-                  <div>Option A, Option B, Option C, Option D</div>
-                  <div className="text-cyan-300">Correct Option &bull; Explanation</div>
-                  <div>Topic</div>
-                </div>
-              </div>
-
-              {/* Sheet 4: Events */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-indigo-300 font-mono">4. Events</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">7 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">College events summary and active time limits.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>#, Event Code, Event Name</div>
-                  <div>College Name, Duration, Status, Created At</div>
-                </div>
-              </div>
-
-              {/* Sheet 5: Attempts (Clean) */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-violet-300 font-mono">5. Attempts</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">13 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">Each submission with the student's contact details and score.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>#, Student Name, Email, Mobile</div>
-                  <div>College, Branch, Year</div>
-                  <div>Score, Percentage, Time Taken, Status</div>
-                  <div>Submitted At, Event Code</div>
-                </div>
-              </div>
-
-              {/* Architecture Badge */}
-              <div className="p-4 rounded-xl bg-indigo-950/30 border border-indigo-500/20 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300 mb-1">
-                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                    High-Concurrency Architecture
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Students answer freely on their phones. Scores are atomic and synced cleanly to Google Sheets when they submit.
-                  </p>
-                </div>
-                <div className="mt-3 pt-2 border-t border-indigo-900/50 flex items-center justify-between text-[10px] text-indigo-300">
-                  <span>Batch write on submit</span>
-                  <span>100% Server Authoritative</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Setup Walkthrough Card */}
-          <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs text-slate-300 space-y-3">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-cyan-400" />
-              Deployment &amp; Setup Guide for Event Organizers
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                <span className="font-bold text-indigo-300 block mb-1">1. Google Spreadsheet</span>
-                <p className="text-[11px] text-slate-400">
-                  Create a blank spreadsheet in Google Drive. Copy the Spreadsheet ID from the URL and paste it in the box above, then click &ldquo;Verify &amp; Ensure 5 Tabs&rdquo;.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                <span className="font-bold text-cyan-300 block mb-1">2. Admin Google Sign-In</span>
-                <p className="text-[11px] text-slate-400">
-                  Admins log in using their authorized Google account (<code className="text-slate-200">innovit.techies@gmail.com</code>). Students never need a Google account.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800">
-                <span className="font-bold text-emerald-300 block mb-1">3. Event Execution</span>
-                <p className="text-[11px] text-slate-400">
-                  Open Projector QR mode on the auditorium screen. Students scan, register, complete the 5-minute quiz, and scores sync automatically into Google Sheets.
-                </p>
-              </div>
-            </div>
           </div>
         </div>
       )}

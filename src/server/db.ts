@@ -14,7 +14,6 @@ import {
   OptionLetter,
 } from '../types/index.js';
 import { SAMPLE_QUESTIONS } from './sampleQuestions.js';
-import { googleSheetsService } from './googleSheets.js';
 
 interface DatabaseSchema {
   events: Event[];
@@ -423,7 +422,6 @@ class DatabaseStore {
           // Clear previous answers
           this.data.attempt_answers = this.data.attempt_answers.filter((a) => a.attempt_id !== attempt.id);
           this.persist();
-          this.pushRosterToSheets();
 
           const clientQuestions = this.getClientQuestionsForEvent(event);
           return {
@@ -472,7 +470,6 @@ class DatabaseStore {
 
     this.data.quiz_attempts.push(newAttempt);
     this.persist();
-    this.pushRosterToSheets();
 
     return {
       attempt: newAttempt,
@@ -630,7 +627,6 @@ class DatabaseStore {
     attempt.percentage = percentage;
 
     this.persist();
-    this.pushRosterToSheets();
 
     return {
       attemptId: attempt.id,
@@ -721,7 +717,6 @@ class DatabaseStore {
     // Delete stored answers
     this.data.attempt_answers = this.data.attempt_answers.filter((a) => a.attempt_id !== attemptId);
     this.persist();
-    this.pushRosterToSheets();
   }
 
   // --- LEADERBOARD ---
@@ -874,18 +869,6 @@ class DatabaseStore {
     return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n') + '\r\n';
   }
 
-  private sheetWrite: Promise<void> = Promise.resolve();
-
-  private pushRosterToSheets() {
-    const run = async () => {
-      const snapshot = this.getRawData();
-      await googleSheetsService.syncAllData(snapshot);
-    };
-    this.sheetWrite = this.sheetWrite.then(run, run).catch((err) => {
-      console.warn('Google Sheets student sync failed:', err?.message || err);
-    });
-  }
-
   public getRawData() {
     return {
       events: this.data.events,
@@ -897,4 +880,18 @@ class DatabaseStore {
   }
 }
 
-export const db = new DatabaseStore();
+// Use Firestore when a service account is configured (required for Vercel / multi-instance).
+// Otherwise fall back to the local JSON file for `npm run dev`.
+const useFirestore = Boolean(
+  process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY,
+);
+
+let db: any;
+if (useFirestore) {
+  const { FirestoreDatabaseStore } = await import('./firestoreDb.js');
+  db = new FirestoreDatabaseStore();
+} else {
+  db = new DatabaseStore();
+}
+
+export { db };

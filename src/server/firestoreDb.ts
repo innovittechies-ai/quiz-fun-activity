@@ -1,0 +1,288 @@
+import admin from 'firebase-admin';
+import {
+  Event, Question, Participant, QuizAttempt, ClientQuestion,
+  QuizResultPayload, LeaderboardEntry, AdminStats, OptionLetter,
+} from '../types/index.js';
+import { SAMPLE_QUESTIONS } from './sampleQuestions.js';
+import { STATIC_EVENTS, findEventByCode, findEventById } from './staticConfig.js';
+
+/** Single-collection Firestore store. One collection `participants` holds every
+ * per-student record including answers as a map. Events/questions are static config. */
+
+let _app: admin.app.App | null = null;
+function getAdmin(): admin.app.App {
+  if (_app) return _app;
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  if (privateKey) privateKey = privateKey.replace(/\\n/g, '\n');
+  if (projectId && clientEmail && privateKey) {
+    _app = admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) }, 'innovit-quiz');
+  } else {
+    _app = admin.initializeApp({ projectId: projectId || undefined }, 'innovit-quiz');
+  }
+  return _app;
+}
+function fs(): admin.firestore.Firestore { return getAdmin().firestore(); }
+
+const PARTICIPANTS = 'participants';
+const pDocId = (eventCode: string, id: string) => `${eventCode.toUpperCase()}_${id.trim().toLowerCase()}`;
+
+interface PDoc {
+  id: string; event_id: string; event_code: string; full_name: string; identifier: string;
+  email: string; mobile: string; college: string; branch: string; year: string;
+  score: number; total_questions: number; percentage: number; duration_seconds: number | null;
+  status: 'in_progress' | 'completed' | 'expired' | 'reset'; started_at: string;
+  completed_at: string | null; device_info: string; answers: Record<string, OptionLetter>; created_at: string;
+}
+
+export class FirestoreDatabaseStore {
+  async getEventByCode(code: string): Promise<Event | null> { return findEventByCode(code); }
+  async getEventById(id: string): Promise<Event | null> { return findEventById(id); }
+  async getAllEvents(): Promise<any[]> {
+    const out: any[] = [];
+    for (const event of STATIC_EVENTS) {
+      const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).get();
+      const docs = snap.docs.map((d) => d.data() as PDoc);
+      const completed = docs.filter((d) => d.status === 'completed');
+      const totalScore = completed.reduce((a, c) => a + c.score, 0);
+      out.push({ ...event, participantCount: docs.length, completedCount: completed.length, avgScore: completed.length ? Number((totalScore / completed.length).toFixed(1)) : 0 });
+    }
+    return out;
+  }
+  async createEvent(_d: any): Promise<Event> { throw new Error('Events are static config. Edit src/server/staticConfig.ts.'); }
+  async updateEvent(_id: string, _u: any): Promise<Event> { throw new Error('Events are static config. Edit src/server/staticConfig.ts.'); }
+  async deleteEvent(_id: string): Promise<void> { throw new Error('Events are static config. Edit src/server/staticConfig.ts.'); }
+
+  async getAllQuestions(filters?: { topic?: string; difficulty?: string; isActive?: boolean }): Promise<Question[]> {
+    let list = [...SAMPLE_QUESTIONS];
+    if (filters?.topic) list = list.filter((x) => x.topic.toLowerCase() === filters.topic!.toLowerCase());
+    if (filters?.difficulty) list = list.filter((x) => x.difficulty.toLowerCase() === filters.difficulty!.toLowerCase());
+    if (filters?.isActive !== undefined) list = list.filter((x) => x.is_active === filters.isActive);
+    return list;
+  }
+  async getQuestionById(id: string): Promise<Question | null> { return SAMPLE_QUESTIONS.find((q) => q.id === id) || null; }
+  async getClientQuestionsForEvent(event: Event): Promise<ClientQuestion[]> {
+    const questions: ClientQuestion[] = [];
+    for (const qId of event.question_ids) {
+      const q = await this.getQuestionById(qId);
+      if (q && q.is_active) questions.push({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
+    }
+    if (questions.length < 5) {
+      for (const q of SAMPLE_QUESTIONS) {
+        if (questions.length >= 5) break;
+        if (q.is_active && !questions.some((e) => e.id === q.id)) questions.push({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
+      }
+    }
+    return questions;
+  }
+  async createQuestion(_d: any): Promise<Question> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
+  async updateQuestion(_id: string, _u: any): Promise<Question> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
+  async deleteQuestion(_id: string): Promise<void> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
+
+  async getParticipantById(id: string): Promise<PDoc | null> {
+    const d = await fs().collection(PARTICIPANTS).doc(id).get();
+    return d.exists ? (d.data() as PDoc) : null;
+  }
+  async getAttemptById(attemptId: string): Promise<QuizAttempt | null> {
+    const p = await this.getParticipantById(attemptId);
+    if (!p) return null;
+    return { id: p.id, event_id: p.event_id, participant_id: p.id, status: p.status, started_at: p.started_at, completed_at: p.completed_at, duration_taken_seconds: p.duration_seconds, score: p.score, percentage: p.percentage, total_questions: p.total_questions, device_info: p.device_info, created_at: p.created_at } as QuizAttempt;
+  }
+  async getAttemptAnswersMap(attemptId: string): Promise<Record<string, OptionLetter>> {
+    const p = await this.getParticipantById(attemptId);
+    return (p?.answers as Record<string, OptionLetter>) || {};
+  }
+
+  private toParticipant(p: PDoc): Participant {
+    return { id: p.id, event_id: p.event_id, full_name: p.full_name, identifier: p.identifier, college_name: p.college, branch: p.branch, year: p.year, created_at: p.created_at } as Participant;
+  }
+
+  async registerStudentAndStartQuiz(data: {
+    eventCode: string; fullName: string; identifier: string; collegeName: string;
+    branch?: string; year?: string; deviceInfo?: string;
+  }): Promise<any> {
+    const event = await this.getEventByCode(data.eventCode);
+    if (!event) throw new Error(`Event with code '${data.eventCode}' not found.`);
+    if (!event.is_active) throw new Error('This quiz event is currently inactive or concluded. Please check with your event coordinator.');
+    const normId = data.identifier.trim().toLowerCase();
+    const isEmail = normId.includes('@');
+    const docId = pDocId(event.event_code, normId);
+    const ref = fs().collection(PARTICIPANTS).doc(docId);
+    const snap = await ref.get();
+    const clientQuestions = await this.getClientQuestionsForEvent(event);
+
+    if (snap.exists) {
+      const p = snap.data() as PDoc;
+      if (p.status === 'completed') throw new Error('You have already participated in this quiz.');
+      if (p.status === 'in_progress') {
+        const start = new Date(p.started_at).getTime();
+        const remaining = Math.max(0, event.duration_seconds - Math.floor((Date.now() - start) / 1000));
+        if (remaining <= 0) { await this.submitAttempt(p.id); throw new Error('Your quiz time expired. Your score has been submitted.'); }
+        return { attempt: await this.getAttemptById(p.id), participant: this.toParticipant(p), event, questions: clientQuestions, remainingSeconds: remaining, existingAnswers: p.answers || {}, isResumed: true };
+      }
+      if (p.status === 'reset') {
+        const started = new Date().toISOString();
+        await ref.set({ status: 'in_progress', started_at: started, completed_at: null, duration_seconds: null, score: 0, percentage: 0, answers: {} }, { merge: true });
+        return { attempt: { id: p.id, event_id: p.event_id, participant_id: p.id, status: 'in_progress', started_at: started, completed_at: null, duration_taken_seconds: null, score: 0, percentage: 0, total_questions: clientQuestions.length, device_info: p.device_info, created_at: p.created_at }, participant: this.toParticipant(p), event, questions: clientQuestions, remainingSeconds: event.duration_seconds, existingAnswers: {}, isResumed: false };
+      }
+    }
+
+    const now = new Date().toISOString();
+    const doc: PDoc = {
+      id: docId, event_id: event.id, event_code: event.event_code, full_name: data.fullName.trim(),
+      identifier: normId, email: isEmail ? normId : '', mobile: isEmail ? '' : normId,
+      college: data.collegeName.trim() || event.college_name, branch: data.branch?.trim() || '', year: data.year?.trim() || '',
+      score: 0, total_questions: clientQuestions.length, percentage: 0, duration_seconds: null,
+      status: 'in_progress', started_at: now, completed_at: null, device_info: data.deviceInfo || '',
+      answers: {}, created_at: now,
+    };
+    await ref.set(doc, { merge: true });
+    return {
+      attempt: { id: doc.id, event_id: event.id, participant_id: doc.id, status: 'in_progress', started_at: now, completed_at: null, duration_taken_seconds: null, score: 0, percentage: 0, total_questions: clientQuestions.length, device_info: doc.device_info, created_at: now },
+      participant: this.toParticipant(doc), event, questions: clientQuestions, remainingSeconds: event.duration_seconds, existingAnswers: {}, isResumed: false,
+    };
+  }
+
+  async saveAttemptAnswer(attemptId: string, questionId: string, selectedOption: OptionLetter): Promise<void> {
+    const p = await this.getParticipantById(attemptId);
+    if (!p) throw new Error('Attempt not found');
+    if (p.status !== 'in_progress') throw new Error('Quiz has already been submitted');
+    const event = await this.getEventById(p.event_id);
+    if (event) {
+      const elapsed = Math.floor((Date.now() - new Date(p.started_at).getTime()) / 1000);
+      if (elapsed > event.duration_seconds + 10) { await this.submitAttempt(attemptId); throw new Error('Time has expired.'); }
+    }
+    const answers = { ...(p.answers || {}), [questionId]: selectedOption };
+    await fs().collection(PARTICIPANTS).doc(attemptId).set({ answers }, { merge: true });
+  }
+
+  async submitAttempt(attemptId: string, answersOverride?: Record<string, OptionLetter>): Promise<QuizResultPayload> {
+    const ref = fs().collection(PARTICIPANTS).doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error('Attempt not found');
+    const p = snap.data() as PDoc;
+    if (p.status === 'completed') return (await this.getAttemptResult(attemptId)) as any;
+    const event = await this.getEventById(p.event_id);
+    if (!event) throw new Error('Event not found');
+
+    const answers: Record<string, OptionLetter> = { ...(p.answers || {}), ...(answersOverride || {}) };
+    const clientQuestions = await this.getClientQuestionsForEvent(event);
+    let correctCount = 0;
+    const questionResults = [];
+    for (const cq of clientQuestions) {
+      const q = await this.getQuestionById(cq.id);
+      if (!q) continue;
+      const selected = answers[q.id] || null;
+      const isCorrect = selected === q.correct_answer;
+      if (isCorrect) correctCount++;
+      questionResults.push({ questionId: q.id, question: q.question, optionA: q.option_a, optionB: q.option_b, optionC: q.option_c, optionD: q.option_d, selectedOption: selected, correctAnswer: q.correct_answer, isCorrect, explanation: q.explanation, topic: q.topic });
+    }
+
+    const now = new Date();
+    const startTime = new Date(p.started_at).getTime();
+    const durationTakenSeconds = Math.max(1, Math.min(event.duration_seconds, Math.floor((now.getTime() - startTime) / 1000)));
+    const totalQuestions = clientQuestions.length || 5;
+    const percentage = Number(((correctCount / totalQuestions) * 100).toFixed(1));
+
+    await ref.set({ status: 'completed', completed_at: now.toISOString(), duration_seconds: durationTakenSeconds, score: correctCount, total_questions: totalQuestions, percentage, answers }, { merge: true });
+
+    return {
+      attemptId: p.id, score: correctCount, totalQuestions, percentage, durationTakenSeconds,
+      participant: { fullName: p.full_name, collegeName: p.college, branch: p.branch },
+      event: { eventName: event.event_name, collegeName: event.college_name, eventCode: event.event_code, leaderboardEnabled: event.leaderboard_enabled },
+      questions: questionResults,
+    } as any;
+  }
+
+  async getAttemptResult(attemptId: string): Promise<QuizResultPayload | null> {
+    const p = await this.getParticipantById(attemptId);
+    if (!p || p.status !== 'completed') return null;
+    const event = await this.getEventById(p.event_id);
+    if (!event) return null;
+    const clientQuestions = await this.getClientQuestionsForEvent(event);
+    const questionResults = [];
+    for (const cq of clientQuestions) {
+      const q = await this.getQuestionById(cq.id);
+      if (!q) continue;
+      const selected = (p.answers as Record<string, OptionLetter>)?.[q.id] || null;
+      questionResults.push({ questionId: q.id, question: q.question, optionA: q.option_a, optionB: q.option_b, optionC: q.option_c, optionD: q.option_d, selectedOption: selected, correctAnswer: q.correct_answer, isCorrect: selected === q.correct_answer, explanation: q.explanation, topic: q.topic });
+    }
+    return {
+      attemptId: p.id, score: p.score, totalQuestions: p.total_questions, percentage: p.percentage,
+      durationTakenSeconds: p.duration_seconds || 0,
+      participant: { fullName: p.full_name, collegeName: p.college, branch: p.branch },
+      event: { eventName: event.event_name, collegeName: event.college_name, eventCode: event.event_code, leaderboardEnabled: event.leaderboard_enabled },
+      questions: questionResults,
+    } as any;
+  }
+
+  async resetAttempt(attemptId: string): Promise<void> {
+    const ref = fs().collection(PARTICIPANTS).doc(attemptId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new Error('Attempt not found');
+    await ref.set({ status: 'reset', score: 0, percentage: 0, completed_at: null, duration_seconds: null, answers: {} }, { merge: true });
+  }
+
+  async getLeaderboard(eventCode: string): Promise<{ event: any; leaderboard: LeaderboardEntry[] }> {
+    const event = await this.getEventByCode(eventCode);
+    if (!event) throw new Error('Event not found');
+    const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).where('status', '==', 'completed').get();
+    const completed = snap.docs.map((d) => d.data() as PDoc);
+    completed.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const dA = a.duration_seconds ?? 99999, dB = b.duration_seconds ?? 99999;
+      if (dA !== dB) return dA - dB;
+      return new Date(a.completed_at || 0).getTime() - new Date(b.completed_at || 0).getTime();
+    });
+    const leaderboard: LeaderboardEntry[] = completed.map((p, i) => ({
+      rank: i + 1, participantName: p.full_name, collegeName: p.college || event.college_name,
+      branch: p.branch || '', score: p.score, totalQuestions: p.total_questions,
+      durationTakenSeconds: p.duration_seconds || 0, completedAt: p.completed_at || p.created_at,
+    }));
+    return { event: { eventName: event.event_name, collegeName: event.college_name, eventCode: event.event_code, leaderboardEnabled: event.leaderboard_enabled }, leaderboard };
+  }
+
+  async getAdminStats(): Promise<AdminStats> {
+    const snap = await fs().collection(PARTICIPANTS).get();
+    const docs = snap.docs.map((d) => d.data() as PDoc);
+    const completed = docs.filter((d) => d.status === 'completed');
+    const totalScore = completed.reduce((a, c) => a + c.score, 0);
+    return {
+      totalParticipants: docs.length, completedAttempts: completed.length,
+      activeAttempts: docs.filter((d) => d.status === 'in_progress').length,
+      averageScore: completed.length ? Number((totalScore / completed.length).toFixed(2)) : 0,
+      highestScore: completed.reduce((m, c) => Math.max(m, c.score), 0),
+      totalEvents: STATIC_EVENTS.length, totalQuestions: SAMPLE_QUESTIONS.length,
+    };
+  }
+
+  async getEventAttemptsDetails(eventCode: string): Promise<any[]> {
+    const event = await this.getEventByCode(eventCode);
+    if (!event) throw new Error('Event not found');
+    const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).get();
+    return snap.docs.map((d) => {
+      const a = d.data() as PDoc;
+      return {
+        attemptId: a.id, participantId: a.id, fullName: a.full_name, identifier: a.identifier,
+        collegeName: a.college, branch: a.branch || '', year: a.year || '',
+        status: a.status, score: a.score, totalQuestions: a.total_questions, percentage: a.percentage,
+        durationTakenSeconds: a.duration_seconds, startedAt: a.started_at, completedAt: a.completed_at,
+      };
+    });
+  }
+
+  async exportEventCSV(eventCode: string): Promise<string> {
+    const attempts = await this.getEventAttemptsDetails(eventCode);
+    const headers = ['Rank','Full Name','Email / Mobile','College Name','Branch','Year','Status','Score','Total Questions','Percentage (%)','Time Taken (seconds)','Started At','Completed At'];
+    const sorted = [...attempts].sort((a, b) => { if (b.score !== a.score) return b.score - a.score; return (a.durationTakenSeconds || 999) - (b.durationTakenSeconds || 999); });
+    const rows = sorted.map((att, idx) => [
+      att.status === 'completed' ? idx + 1 : 'N/A',
+      `"${att.fullName.replace(/"/g,'""')}"`, `"${att.identifier.replace(/"/g,'""')}"`,
+      `"${att.collegeName.replace(/"/g,'""')}"`, `"${att.branch.replace(/"/g,'""')}"`,
+      `"${att.year.replace(/"/g,'""')}"`, att.status, att.score, att.totalQuestions, att.percentage,
+      att.durationTakenSeconds || '', att.startedAt, att.completedAt || '',
+    ]);
+    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n') + '\r\n';
+  }
+}
