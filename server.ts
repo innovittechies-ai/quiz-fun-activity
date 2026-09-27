@@ -298,17 +298,18 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
   }
 });
 
-// Admin Passkey Login (Fallback)
+// Admin Login (username + password)
 app.post('/api/admin/login', (req: Request, res: Response) => {
-  const { password } = req.body;
-  if (!password || password !== ADMIN_PASSWORD) {
-    res.status(401).json({ error: 'Invalid admin credentials' });
+  const { username, password } = req.body || {};
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  if (!username || !password || username !== adminUsername || password !== ADMIN_PASSWORD) {
+    res.status(401).json({ error: 'Invalid username or password' });
     return;
   }
   res.json({
     success: true,
     token: ADMIN_PASSWORD,
-    adminUser: { email: 'innovit.admin@innovit.org', name: 'Innovit Admin' },
+    adminUser: { email: `${adminUsername}@innovit.org`, name: 'Innovit Admin' },
   });
 });
 

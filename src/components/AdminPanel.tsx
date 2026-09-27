@@ -27,7 +27,7 @@ import {
   Lock,
   LogOut,
 } from 'lucide-react';
-import { googleSignIn, logout as googleSignOut } from '../services/googleAuth.js';
+// NOTE: Google sign-in removed — simple username + password login only.
 
 interface AdminPanelProps {
   onOpenProjector: (code: string) => void;
@@ -47,7 +47,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       return null;
     }
   });
-  const [showPasskeyInput, setShowPasskeyInput] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
 
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -105,71 +105,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setFeedbackMsg(null), 3500);
   };
 
-  // Login handler via Emergency Passkey
-  const handleLogin = async (e?: React.FormEvent, customPass?: string) => {
+  // Login handler: simple username + password
+  const handleLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setLoginError(null);
     setIsLoggingIn(true);
-    const pass = (customPass !== undefined ? customPass : passwordInput).trim();
-    if (!pass) {
-      setLoginError('Please enter the admin passkey.');
+    const username = usernameInput.trim();
+    const pass = passwordInput.trim();
+    if (!username || !pass) {
+      setLoginError('Please enter your username and password.');
       setIsLoggingIn(false);
       return;
     }
     try {
-      const res = await api.admin.login(pass);
+      const res = await api.admin.login(username, pass);
       const tokenVal = typeof res === 'string' ? res : res.token;
       setToken(tokenVal);
       localStorage.setItem('innovit_admin_token', tokenVal);
-      const user = res.adminUser || { email: 'innovit.admin@innovit.org', name: 'Innovit Admin' };
+      const user = res.adminUser || { email: 'admin@innovit.org', name: 'Admin' };
       setAdminUser(user);
       localStorage.setItem('innovit_admin_user', JSON.stringify(user));
       setPasswordInput('');
-      showNotification('Signed in successfully with Admin Passkey');
+      showNotification('Signed in successfully');
     } catch (err: any) {
-      setLoginError(err.message || 'Login failed. Check password.');
+      setLoginError(err.message || 'Login failed. Check your credentials.');
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  // Login handler via Official Google Account (Recommended)
-  const handleGoogleSignIn = async () => {
-    setLoginError(null);
-    setIsLoggingIn(true);
-    try {
-      const authResult = await googleSignIn();
-      if (!authResult) throw new Error('Google Sign-In was cancelled or failed.');
-
-      const loginRes = await api.admin.googleLogin(authResult.accessToken);
-      setToken(loginRes.token);
-      localStorage.setItem('innovit_admin_token', loginRes.token);
-      setAdminUser(loginRes.adminUser);
-      localStorage.setItem('innovit_admin_user', JSON.stringify(loginRes.adminUser));
-
-      showNotification(
-        `Signed in as ${loginRes.adminUser.name} (${loginRes.adminUser.email})`
-      );
-    } catch (err: any) {
-      if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
-        setShowPasskeyInput(true);
-        setLoginError(
-          `Google Sign-In isn't available for this domain yet. Use the Admin Passkey below (the password you set in Vercel as ADMIN_PASSWORD).`
-        );
-      } else {
-        setLoginError(err.message || 'Google Sign-In failed');
-      }
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await googleSignOut();
-    } catch {
-      // ignore
-    }
+  const handleLogout = () => {
     setToken('');
     setAdminUser(null);
     localStorage.removeItem('innovit_admin_token');
@@ -424,94 +389,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           <h1 className="text-xl font-bold text-white mb-1">Innovit Admin Console</h1>
           <p className="text-xs text-slate-400 mb-6">
-            Sign in with your authorized Google account or admin passkey to manage events and view participants.
+            Sign in with your admin credentials to manage events and view participants.
           </p>
 
           {loginError && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-left space-y-2.5">
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-medium text-left">
               <div className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold text-rose-200 leading-relaxed">{loginError}</p>
-                </div>
+                <p className="font-semibold text-rose-200 leading-relaxed">{loginError}</p>
               </div>
-              {loginError.includes('authorized in Firebase') && (
-                <div className="pt-2 border-t border-rose-500/20 text-[11px] text-rose-300 space-y-2">
-                  <p className="text-slate-400 text-[11px]">
-                    To enable 1-click Google Sign-In, add this domain to Firebase Console &gt; Authentication &gt; Settings &gt; Authorized domains:
-                  </p>
-                  <div className="bg-slate-950/80 p-2 rounded-lg font-mono text-cyan-300 text-[11px] select-all border border-slate-800 flex items-center justify-between">
-                    <span>{typeof window !== 'undefined' ? window.location.hostname : 'quiz-fun-activity.vercel.app'}</span>
-                    <span className="text-[10px] text-slate-500 uppercase font-sans font-bold">Copy</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowPasskeyInput(true)}
-                    className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <span>⚡ Use Admin Passkey instead</span>
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Primary: Sign in with Google (Recommended) */}
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={isLoggingIn}
-              className="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-900 rounded-xl text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-md shadow-white/10 cursor-pointer disabled:opacity-50"
-            >
-              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>{isLoggingIn ? 'Connecting to Google...' : 'Sign In with Google Account'}</span>
-            </button>
-
-            <div className="flex items-center gap-2 justify-center text-[11px] text-slate-400">
-              <Shield className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Authorized admin only — sign in with your configured Google account or passkey.</span>
+          <form onSubmit={handleLogin} className="space-y-3 text-left">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Username</label>
+              <input
+                type="text"
+                required
+                autoFocus
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                placeholder="admin"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
             </div>
-          </div>
-
-          {/* Emergency Fallback Toggle */}
-          <div className="mt-8 pt-5 border-t border-slate-800/80">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Password</label>
+              <input
+                type="password"
+                required
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
             <button
-              type="button"
-              onClick={() => setShowPasskeyInput(!showPasskeyInput)}
-              className="text-xs text-slate-400 hover:text-slate-300 font-medium underline cursor-pointer"
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition-all cursor-pointer disabled:opacity-50"
             >
-              {showPasskeyInput ? 'Close Emergency Passkey Login' : 'Or Use Emergency Admin Passkey'}
+              {isLoggingIn ? 'Signing in...' : 'Sign In'}
             </button>
-
-            {showPasskeyInput && (
-              <form onSubmit={handleLogin} className="space-y-3 mt-3 text-left">
-                <div>
-                  <input
-                    type="password"
-                    required
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Admin Passkey"
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isLoggingIn ? 'Verifying Passkey...' : 'Sign In with Passkey'}
-                </button>
-              </form>
-            )}
-          </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
         </div>
       </div>
     );
@@ -561,7 +486,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-semibold text-[10px]">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                Firestore Connected
+                Supabase Connected
               </span>
             </div>
           )}

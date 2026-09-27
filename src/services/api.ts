@@ -196,34 +196,18 @@ export const api = {
 
   // Admin APIs
   admin: {
-    async login(password: string): Promise<{
+    async login(username: string, password: string): Promise<{
       token: string;
       adminUser: { email: string; name: string };
     }> {
       const res = await fetch(`${API_BASE}/admin/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Invalid admin credentials');
-      }
-      return res.json();
-    },
-
-    async googleLogin(accessToken: string): Promise<{
-      token: string;
-      adminUser: { email: string; name: string; picture?: string };
-    }> {
-      const res = await fetch(`${API_BASE}/admin/google-login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Google login failed');
       }
       return res.json();
     },
