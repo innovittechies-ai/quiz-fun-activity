@@ -437,10 +437,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       </div>
     );
   }
-        </div>
-      </div>
-    );
-  }
 
   // Filtered Questions
   const filteredQuestions = questions.filter((q) => {
@@ -469,7 +465,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
               Admin Console
             </span>
-            <span className="text-xs text-slate-400 font-mono">v2.0 (Google Sheets & Google Ecosystem)</span>
+            <span className="text-xs text-slate-400 font-mono">v2.0 (Supabase)</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
             College Event Manager
