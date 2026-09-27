@@ -1447,7 +1447,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </p>
                 <ol className="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
                   <li>
-                    Open Firebase Console: <a href="https://console.firebase.google.com/project/gen-lang-client-0121315602/authentication/settings" target="_blank" rel="noopener noreferrer" className="underline text-cyan-400 font-bold">Firebase Authorized Domains Settings</a>
+                    Open Firebase Console: <a href="https://console.firebase.google.com/project/gen-lang-client-0149541750/authentication/settings" target="_blank" rel="noopener noreferrer" className="underline text-cyan-400 font-bold">Firebase Authorized Domains Settings</a>
                   </li>
                   <li>
                     Under <strong>Authorized domains</strong>, click <strong>Add domain</strong> and enter: <code className="bg-slate-900 px-1 py-0.5 rounded text-amber-300 font-mono">{typeof window !== 'undefined' ? window.location.hostname : 'quiz-fun-activity.vercel.app'}</code>
