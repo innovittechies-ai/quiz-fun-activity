@@ -13,6 +13,11 @@ import { STATIC_EVENTS, findEventByCode, findEventById } from './staticConfig.js
 const TABLE = 'participants';
 const pDocId = (eventCode: string, id: string) => `${eventCode.toUpperCase()}_${id.trim().toLowerCase()}`;
 
+// Hardcoded Supabase credentials (server-side only — never bundled into the browser).
+// Env vars (SUPABASE_URL / SUPABASE_SERVICE_KEY) override these if present.
+const DEFAULT_SUPABASE_URL = 'https://aowkekpseggmcotzeqdv.supabase.co';
+const DEFAULT_SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvd2tla3BzZWdnbWNvdHplcWR2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDUyODc4OSwiZXhwIjoyMTA2MTA0Nzg5fQ.P421kKOAIC4llU6nuJ9Yb73K5vPJOXCicpP2zfGKMIs';
+
 interface PDoc {
   id: string; event_id: string; event_code: string; full_name: string; identifier: string;
   email: string; mobile: string; college: string; branch: string; year: string;
@@ -24,9 +29,8 @@ interface PDoc {
 let _client: SupabaseClient | null = null;
 function client(): SupabaseClient {
   if (_client) return _client;
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set.');
+  const url = process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY || DEFAULT_SUPABASE_SERVICE_KEY;
   _client = createClient(url, key, { auth: { persistSession: false } });
   return _client;
 }
