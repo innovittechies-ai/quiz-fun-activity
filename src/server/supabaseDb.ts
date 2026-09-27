@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   Event, Question, Participant, QuizAttempt, ClientQuestion,
   QuizResultPayload, LeaderboardEntry, AdminStats, OptionLetter,
@@ -6,26 +6,11 @@ import {
 import { SAMPLE_QUESTIONS } from './sampleQuestions.js';
 import { STATIC_EVENTS, findEventByCode, findEventById } from './staticConfig.js';
 
-/** Single-collection Firestore store. One collection `participants` holds every
- * per-student record including answers as a map. Events/questions are static config. */
+/** Single-table Supabase (Postgres) store. One table `participants` holds every
+ * per-student record including answers as a JSONB map. Events/questions are static config.
+ * Uses the service_role key (bypasses RLS) so only the backend can read/write. */
 
-let _app: admin.app.App | null = null;
-function getAdmin(): admin.app.App {
-  if (_app) return _app;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-  if (privateKey) privateKey = privateKey.replace(/\\n/g, '\n');
-  if (projectId && clientEmail && privateKey) {
-    _app = admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) }, 'innovit-quiz');
-  } else {
-    _app = admin.initializeApp({ projectId: projectId || undefined }, 'innovit-quiz');
-  }
-  return _app;
-}
-function fs(): admin.firestore.Firestore { return getAdmin().firestore(); }
-
-const PARTICIPANTS = 'participants';
+const TABLE = 'participants';
 const pDocId = (eventCode: string, id: string) => `${eventCode.toUpperCase()}_${id.trim().toLowerCase()}`;
 
 interface PDoc {
@@ -36,14 +21,25 @@ interface PDoc {
   completed_at: string | null; device_info: string; answers: Record<string, OptionLetter>; created_at: string;
 }
 
-export class FirestoreDatabaseStore {
+let _client: SupabaseClient | null = null;
+function client(): SupabaseClient {
+  if (_client) return _client;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_KEY must be set.');
+  _client = createClient(url, key, { auth: { persistSession: false } });
+  return _client;
+}
+
+export class SupabaseDatabaseStore {
   async getEventByCode(code: string): Promise<Event | null> { return findEventByCode(code); }
   async getEventById(id: string): Promise<Event | null> { return findEventById(id); }
+
   async getAllEvents(): Promise<any[]> {
     const out: any[] = [];
     for (const event of STATIC_EVENTS) {
-      const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).get();
-      const docs = snap.docs.map((d) => d.data() as PDoc);
+      const { data } = await client().from(TABLE).select('*').eq('event_code', event.event_code);
+      const docs = (data || []) as PDoc[];
       const completed = docs.filter((d) => d.status === 'completed');
       const totalScore = completed.reduce((a, c) => a + c.score, 0);
       out.push({ ...event, participantCount: docs.length, completedCount: completed.length, avgScore: completed.length ? Number((totalScore / completed.length).toFixed(1)) : 0 });
@@ -81,8 +77,8 @@ export class FirestoreDatabaseStore {
   async deleteQuestion(_id: string): Promise<void> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
 
   async getParticipantById(id: string): Promise<PDoc | null> {
-    const d = await fs().collection(PARTICIPANTS).doc(id).get();
-    return d.exists ? (d.data() as PDoc) : null;
+    const { data } = await client().from(TABLE).select('*').eq('id', id).maybeSingle();
+    return (data as PDoc) || null;
   }
   async getAttemptById(attemptId: string): Promise<QuizAttempt | null> {
     const p = await this.getParticipantById(attemptId);
@@ -97,6 +93,7 @@ export class FirestoreDatabaseStore {
   private toParticipant(p: PDoc): Participant {
     return { id: p.id, event_id: p.event_id, full_name: p.full_name, identifier: p.identifier, college_name: p.college, branch: p.branch, year: p.year, created_at: p.created_at } as Participant;
   }
+  // __APPEND_HERE__
 
   async registerStudentAndStartQuiz(data: {
     eventCode: string; fullName: string; identifier: string; collegeName: string;
@@ -108,12 +105,11 @@ export class FirestoreDatabaseStore {
     const normId = data.identifier.trim().toLowerCase();
     const isEmail = normId.includes('@');
     const docId = pDocId(event.event_code, normId);
-    const ref = fs().collection(PARTICIPANTS).doc(docId);
-    const snap = await ref.get();
+    const existing = await this.getParticipantById(docId);
     const clientQuestions = await this.getClientQuestionsForEvent(event);
 
-    if (snap.exists) {
-      const p = snap.data() as PDoc;
+    if (existing) {
+      const p = existing;
       if (p.status === 'completed') throw new Error('You have already participated in this quiz.');
       if (p.status === 'in_progress') {
         const start = new Date(p.started_at).getTime();
@@ -123,7 +119,7 @@ export class FirestoreDatabaseStore {
       }
       if (p.status === 'reset') {
         const started = new Date().toISOString();
-        await ref.set({ status: 'in_progress', started_at: started, completed_at: null, duration_seconds: null, score: 0, percentage: 0, answers: {} }, { merge: true });
+        await client().from(TABLE).update({ status: 'in_progress', started_at: started, completed_at: null, duration_seconds: null, score: 0, percentage: 0, answers: {} }).eq('id', docId);
         return { attempt: { id: p.id, event_id: p.event_id, participant_id: p.id, status: 'in_progress', started_at: started, completed_at: null, duration_taken_seconds: null, score: 0, percentage: 0, total_questions: clientQuestions.length, device_info: p.device_info, created_at: p.created_at }, participant: this.toParticipant(p), event, questions: clientQuestions, remainingSeconds: event.duration_seconds, existingAnswers: {}, isResumed: false };
       }
     }
@@ -137,7 +133,7 @@ export class FirestoreDatabaseStore {
       status: 'in_progress', started_at: now, completed_at: null, device_info: data.deviceInfo || '',
       answers: {}, created_at: now,
     };
-    await ref.set(doc, { merge: true });
+    await client().from(TABLE).upsert(doc, { onConflict: 'id' });
     return {
       attempt: { id: doc.id, event_id: event.id, participant_id: doc.id, status: 'in_progress', started_at: now, completed_at: null, duration_taken_seconds: null, score: 0, percentage: 0, total_questions: clientQuestions.length, device_info: doc.device_info, created_at: now },
       participant: this.toParticipant(doc), event, questions: clientQuestions, remainingSeconds: event.duration_seconds, existingAnswers: {}, isResumed: false,
@@ -154,14 +150,12 @@ export class FirestoreDatabaseStore {
       if (elapsed > event.duration_seconds + 10) { await this.submitAttempt(attemptId); throw new Error('Time has expired.'); }
     }
     const answers = { ...(p.answers || {}), [questionId]: selectedOption };
-    await fs().collection(PARTICIPANTS).doc(attemptId).set({ answers }, { merge: true });
+    await client().from(TABLE).update({ answers }).eq('id', attemptId);
   }
 
   async submitAttempt(attemptId: string, answersOverride?: Record<string, OptionLetter>): Promise<QuizResultPayload> {
-    const ref = fs().collection(PARTICIPANTS).doc(attemptId);
-    const snap = await ref.get();
-    if (!snap.exists) throw new Error('Attempt not found');
-    const p = snap.data() as PDoc;
+    const p = await this.getParticipantById(attemptId);
+    if (!p) throw new Error('Attempt not found');
     if (p.status === 'completed') return (await this.getAttemptResult(attemptId)) as any;
     const event = await this.getEventById(p.event_id);
     if (!event) throw new Error('Event not found');
@@ -185,7 +179,7 @@ export class FirestoreDatabaseStore {
     const totalQuestions = clientQuestions.length || 5;
     const percentage = Number(((correctCount / totalQuestions) * 100).toFixed(1));
 
-    await ref.set({ status: 'completed', completed_at: now.toISOString(), duration_seconds: durationTakenSeconds, score: correctCount, total_questions: totalQuestions, percentage, answers }, { merge: true });
+    await client().from(TABLE).update({ status: 'completed', completed_at: now.toISOString(), duration_seconds: durationTakenSeconds, score: correctCount, total_questions: totalQuestions, percentage, answers }).eq('id', attemptId);
 
     return {
       attemptId: p.id, score: correctCount, totalQuestions, percentage, durationTakenSeconds,
@@ -218,17 +212,16 @@ export class FirestoreDatabaseStore {
   }
 
   async resetAttempt(attemptId: string): Promise<void> {
-    const ref = fs().collection(PARTICIPANTS).doc(attemptId);
-    const snap = await ref.get();
-    if (!snap.exists) throw new Error('Attempt not found');
-    await ref.set({ status: 'reset', score: 0, percentage: 0, completed_at: null, duration_seconds: null, answers: {} }, { merge: true });
+    const p = await this.getParticipantById(attemptId);
+    if (!p) throw new Error('Attempt not found');
+    await client().from(TABLE).update({ status: 'reset', score: 0, percentage: 0, completed_at: null, duration_seconds: null, answers: {} }).eq('id', attemptId);
   }
 
   async getLeaderboard(eventCode: string): Promise<{ event: any; leaderboard: LeaderboardEntry[] }> {
     const event = await this.getEventByCode(eventCode);
     if (!event) throw new Error('Event not found');
-    const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).where('status', '==', 'completed').get();
-    const completed = snap.docs.map((d) => d.data() as PDoc);
+    const { data } = await client().from(TABLE).select('*').eq('event_code', event.event_code).eq('status', 'completed');
+    const completed = (data || []) as PDoc[];
     completed.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       const dA = a.duration_seconds ?? 99999, dB = b.duration_seconds ?? 99999;
@@ -244,8 +237,8 @@ export class FirestoreDatabaseStore {
   }
 
   async getAdminStats(): Promise<AdminStats> {
-    const snap = await fs().collection(PARTICIPANTS).get();
-    const docs = snap.docs.map((d) => d.data() as PDoc);
+    const { data } = await client().from(TABLE).select('*');
+    const docs = (data || []) as PDoc[];
     const completed = docs.filter((d) => d.status === 'completed');
     const totalScore = completed.reduce((a, c) => a + c.score, 0);
     return {
@@ -260,16 +253,13 @@ export class FirestoreDatabaseStore {
   async getEventAttemptsDetails(eventCode: string): Promise<any[]> {
     const event = await this.getEventByCode(eventCode);
     if (!event) throw new Error('Event not found');
-    const snap = await fs().collection(PARTICIPANTS).where('event_code', '==', event.event_code).get();
-    return snap.docs.map((d) => {
-      const a = d.data() as PDoc;
-      return {
-        attemptId: a.id, participantId: a.id, fullName: a.full_name, identifier: a.identifier,
-        collegeName: a.college, branch: a.branch || '', year: a.year || '',
-        status: a.status, score: a.score, totalQuestions: a.total_questions, percentage: a.percentage,
-        durationTakenSeconds: a.duration_seconds, startedAt: a.started_at, completedAt: a.completed_at,
-      };
-    });
+    const { data } = await client().from(TABLE).select('*').eq('event_code', event.event_code);
+    return (data || []).map((a: any) => ({
+      attemptId: a.id, participantId: a.id, fullName: a.full_name, identifier: a.identifier,
+      collegeName: a.college, branch: a.branch || '', year: a.year || '',
+      status: a.status, score: a.score, totalQuestions: a.total_questions, percentage: a.percentage,
+      durationTakenSeconds: a.duration_seconds, startedAt: a.started_at, completedAt: a.completed_at,
+    }));
   }
 
   async exportEventCSV(eventCode: string): Promise<string> {

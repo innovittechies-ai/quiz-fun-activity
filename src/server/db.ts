@@ -880,16 +880,16 @@ class DatabaseStore {
   }
 }
 
-// Use Firestore when a service account is configured (required for Vercel / multi-instance).
+// Use Supabase (Postgres) when configured (required for Vercel / multi-instance / 500 students).
 // Otherwise fall back to the local JSON file for `npm run dev`.
-const useFirestore = Boolean(
-  process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY,
+const useSupabase = Boolean(
+  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY,
 );
 
 let db: any;
-if (useFirestore) {
-  const { FirestoreDatabaseStore } = await import('./firestoreDb.js');
-  db = new FirestoreDatabaseStore();
+if (useSupabase) {
+  const { SupabaseDatabaseStore } = await import('./supabaseDb.js');
+  db = new SupabaseDatabaseStore();
 } else {
   db = new DatabaseStore();
 }
