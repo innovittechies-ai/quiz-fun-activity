@@ -352,13 +352,19 @@ export const api = {
       return res.json();
     },
 
-    async syncAllSheets(token: string): Promise<{ success: boolean; message: string; rowsSynced: number }> {
+    async syncAllSheets(
+      token: string,
+      googleToken?: string,
+      spreadsheetId?: string
+    ): Promise<{ success: boolean; message: string; rowsSynced: number }> {
       const res = await fetch(`${API_BASE}/admin/sheets/sync-all`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-admin-token': token,
+          ...(googleToken ? { 'x-google-access-token': googleToken } : {}),
         },
+        body: JSON.stringify({ accessToken: googleToken, spreadsheetId }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

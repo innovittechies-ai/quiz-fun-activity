@@ -366,6 +366,15 @@ app.get('/api/admin/sheets/status', requireAdmin, (req: Request, res: Response) 
 // Full database sync to all 5 Google Sheets tabs
 app.post('/api/admin/sheets/sync-all', requireAdmin, async (req: Request, res: Response) => {
   try {
+    const { accessToken, spreadsheetId } = req.body || {};
+    const headerToken = req.headers['x-google-access-token'] as string;
+    const token = accessToken || headerToken;
+    if (token) {
+      googleSheetsService.setAccessToken(token.trim());
+    }
+    if (spreadsheetId) {
+      googleSheetsService.setSpreadsheetId(spreadsheetId.trim());
+    }
     const rawData = db.getRawData();
     const result = await googleSheetsService.syncAllData(rawData);
     res.json(result);

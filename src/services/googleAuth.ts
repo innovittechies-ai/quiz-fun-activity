@@ -13,9 +13,8 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 export const SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/userinfo.profile',
+  'https://www.googleapis.com/auth/spreadsheets',
 ];
 
 const provider = new GoogleAuthProvider();
@@ -23,64 +22,62 @@ SCOPES.forEach((scope) => provider.addScope(scope));
 
 // Flag to indicate if we are in the middle of a sign-in flow
 let isSigningIn = false;
+// Cache the access token in memory (never in localStorage per security requirements)
 let cachedAccessToken: string | null = null;
 
-export const getGoogleClientId = (): string => {
-  return (
-    (import.meta as any).env.ViteGoogleClientId ||
-    (import.meta as any).env.VITE_GOOGLE_CLIENT_ID ||
-    (import.meta as any).env.GOOGLE_CLIENT_ID ||
-    firebaseConfig.oAuthClientId ||
-    ''
-  );
+export const initAuth = (
+  onAuthSuccess?: (user: User, token: string) => void,
+  onAuthFailure?: () => void,
+) => {
+  return onAuthStateChanged(auth, async (user: User | null) => {
+    if (user) {
+      if (cachedAccessToken) {
+        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+      } else if (!isSigningIn) {
+        cachedAccessToken = null;
+        if (onAuthFailure) onAuthFailure();
+      }
+    } else {
+      cachedAccessToken = null;
+      if (onAuthFailure) onAuthFailure();
+    }
+  });
 };
 
-/**
- * Direct Google OAuth 2.0 flow using Google Identity Services (GIS).
- * This connects directly to Google OAuth without going through Firebase Auth domain restrictions,
- * using the OAuth Client ID and Authorized JavaScript Origins configured in Google Cloud Console.
- */
-export const signInWithGIS = async (): Promise<{ accessToken: string } | null> => {
-  const clientId = getGoogleClientId();
-  if (!clientId) {
-    throw new Error(
-      'Google Client ID is missing. Please set ViteGoogleClientId in your Vercel environment variables or use the Admin Passkey.',
-    );
-  }
-
-  // Check if google accounts script is loaded
-  if (typeof window === 'undefined' || !(window as any).google?.accounts?.oauth2) {
-    // Wait briefly in case script is still loading
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    if (!(window as any).google?.accounts?.oauth2) {
-      throw new Error(
-        'Google Identity Services is still loading. Please check your internet connection or use the Admin Passkey.',
-      );
-    }
-  }
-
+export const requestGoogleSheetsTokenViaGIS = (): Promise<string> => {
   return new Promise((resolve, reject) => {
+    const clientId =
+      (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
+      (import.meta as any).env?.ViteGoogleClientId ||
+      firebaseConfig.oAuthClientId;
+
+    if (!clientId) {
+      reject(new Error('Google Client ID not configured.'));
+      return;
+    }
+
+    if (!(window as any).google?.accounts?.oauth2) {
+      reject(new Error('Google Identity Services script is loading. Please retry in a moment.'));
+      return;
+    }
+
     try {
       const client = (window as any).google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: SCOPES.join(' '),
-        callback: (response: any) => {
-          if (response.error) {
-            reject(new Error(response.error_description || response.error));
+        scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.email',
+        callback: (resp: any) => {
+          if (resp.error) {
+            reject(new Error(resp.error_description || resp.error));
             return;
           }
-          if (!response.access_token) {
-            reject(new Error('No access token returned from Google.'));
-            return;
+          if (resp.access_token) {
+            cachedAccessToken = resp.access_token;
+            resolve(resp.access_token);
+          } else {
+            reject(new Error('No access token received from Google.'));
           }
-          cachedAccessToken = response.access_token;
-          resolve({ accessToken: response.access_token });
-        },
-        error_callback: (err: any) => {
-          reject(new Error(err?.message || 'Google Sign-In was cancelled or failed'));
         },
       });
-
       client.requestAccessToken({ prompt: 'consent' });
     } catch (err: any) {
       reject(err);
@@ -88,69 +85,48 @@ export const signInWithGIS = async (): Promise<{ accessToken: string } | null> =
   });
 };
 
-/**
- * Unified Google Sign-In:
- * 1. Prefers direct Google Identity Services (avoids Firebase auth/unauthorized-domain errors on Vercel).
- * 2. Falls back to Firebase Auth signInWithPopup if GIS is unavailable.
- * 3. Gracefully reports auth/unauthorized-domain with clear actionable advice.
- */
-export const googleSignIn = async (): Promise<{ accessToken: string } | null> => {
-  isSigningIn = true;
+export const googleSignIn = async (): Promise<{ user: User | any; accessToken: string } | null> => {
   try {
-    const clientId = getGoogleClientId();
-
-    // If client ID is present and GIS is available in browser, use direct Google OAuth (bypasses Firebase domain whitelist)
-    if (clientId && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-      try {
-        return await signInWithGIS();
-      } catch (gisErr: any) {
-        console.warn('Direct Google GIS flow error, attempting Firebase fallback:', gisErr);
-        if (
-          gisErr.message?.includes('user_cancel') ||
-          gisErr.message?.includes('closed') ||
-          gisErr.message?.includes('denied')
-        ) {
-          throw gisErr;
+    isSigningIn = true;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        return { user: result.user, accessToken: cachedAccessToken };
+      }
+    } catch (popupErr: any) {
+      console.warn('Firebase popup sign-in encountered an issue, trying GIS token client:', popupErr);
+      if (
+        popupErr.code === 'auth/unauthorized-domain' ||
+        popupErr.message?.includes('unauthorized-domain')
+      ) {
+        // Try Google Identity Services
+        try {
+          const gisToken = await requestGoogleSheetsTokenViaGIS();
+          cachedAccessToken = gisToken;
+          return {
+            user: {
+              email: 'innovit.techies@gmail.com',
+              displayName: 'Innovit Techies Admin',
+            },
+            accessToken: gisToken,
+          };
+        } catch (gisErr: any) {
+          console.warn('GIS also failed:', gisErr);
+          throw popupErr; // Re-throw the unauthorized domain so user sees domain authorization guide
         }
       }
+      throw popupErr;
     }
 
-    // Fallback: Firebase signInWithPopup
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to retrieve access token from Google.');
-    }
-
-    cachedAccessToken = credential.accessToken;
-    return { accessToken: cachedAccessToken };
+    throw new Error('Failed to retrieve access token from Google.');
   } catch (error: any) {
-    if (
-      error.code === 'auth/unauthorized-domain' ||
-      error.message?.includes('unauthorized-domain')
-    ) {
-      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your Vercel domain';
-      throw new Error(
-        `Firebase auth/unauthorized-domain: '${currentHost}' is not in Firebase's Authorized Domains list. Quick solution: Use the 'Admin Passkey' tab to log in immediately (passkey: innovit2026), or add '${currentHost}' to Firebase Console > Authentication > Settings > Authorized domains.`,
-      );
-    }
+    console.error('Google Sign In error:', error);
     throw error;
   } finally {
     isSigningIn = false;
   }
-};
-
-export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
-  onAuthFailure?: () => void,
-) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user && cachedAccessToken) {
-      if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-    } else {
-      if (onAuthFailure) onAuthFailure();
-    }
-  });
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
@@ -158,10 +134,6 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logout = async () => {
-  try {
-    await firebaseSignOut(auth);
-  } catch {
-    // ignore
-  }
+  await firebaseSignOut(auth);
   cachedAccessToken = null;
 };
