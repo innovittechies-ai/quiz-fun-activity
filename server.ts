@@ -21,7 +21,7 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'innovit.techies@gmail.com')
 app.use(express.json());
 
 // In-memory set of verified active Google admin session tokens
-const verifiedGoogleAdminTokens = new Map<string, { email: string; expiresAt: number }>();
+const verifiedGoogleAdminTokens = new Map<string, { email: string; expiresAt: number; googleAccessToken: string }>();
 
 // Request logger for debugging live events
 app.use((req, res, next) => {
@@ -89,9 +89,22 @@ app.get('/api/events/:code', (req: Request, res: Response) => {
   }
 });
 
+// Helper: inject the most recently verified Google admin token into googleSheetsService
+function injectLatestGoogleToken() {
+  const now = Date.now();
+  for (const [, session] of verifiedGoogleAdminTokens) {
+    if (session.expiresAt > now && session.googleAccessToken) {
+      googleSheetsService.setAccessToken(session.googleAccessToken);
+      return;
+    }
+  }
+}
+
 // Student registration and quiz start / resume
 app.post('/api/quiz/register', (req: Request, res: Response) => {
   try {
+    injectLatestGoogleToken();
+
     const { eventCode, fullName, identifier, collegeName, branch, year } = req.body;
 
     if (!eventCode || !fullName || !identifier) {
@@ -201,6 +214,8 @@ app.post('/api/quiz/answer', (req: Request, res: Response) => {
 // Submit quiz for server-side score calculation
 app.post('/api/quiz/submit', (req: Request, res: Response) => {
   try {
+    injectLatestGoogleToken();
+
     const { attemptId, answers } = req.body;
     if (!attemptId) {
       res.status(400).json({ error: 'attemptId is required' });
@@ -289,6 +304,7 @@ app.post('/api/admin/google-login', async (req: Request, res: Response) => {
     verifiedGoogleAdminTokens.set(sessionToken, {
       email: userEmail,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      googleAccessToken: accessToken,
     });
 
     res.json({
