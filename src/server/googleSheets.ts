@@ -1,9 +1,8 @@
 /**
  * Google Sheets Integration & High-Concurrency Adapter for Innovit AI Quiz Portal.
  * 
- * Supports reading/writing through Google Sheets API with robust batching and
- * fallbacks so the app operates with low latency during high-concurrency (100-500 students)
- * college events.
+ * Writes straight, simple, human-readable student records with live scores,
+ * eliminating all raw UUIDs and relational foreign-key complexity.
  */
 
 export interface GoogleSheetsConfig {
@@ -39,7 +38,7 @@ export class GoogleSheetsService {
   }
 
   /**
-   * Initializes sheet headers and structure if a new spreadsheet is connected.
+   * Initializes sheet headers and structure with straight, simple human-readable columns.
    */
   public async ensureSheetStructure(): Promise<{ success: boolean; message: string }> {
     if (!this.isConfigured() || !this.accessToken) {
@@ -47,67 +46,74 @@ export class GoogleSheetsService {
     }
 
     try {
-      // Setup tabs: Events, Questions, Participants, Attempts, Answers
       const headersMap: Record<string, string[]> = {
-        Events: [
-          'eventId',
-          'eventCode',
-          'eventName',
-          'collegeName',
-          'description',
-          'durationSeconds',
-          'status',
-          'leaderboardEnabled',
-          'createdAt',
+        Participants: [
+          '#',
+          'Student Name',
+          'Email',
+          'Mobile',
+          'College',
+          'Branch',
+          'Year',
+          'Score',
+          'Percentage',
+          'Time Taken',
+          'Status',
+          'Submitted At',
+          'Event Code',
+        ],
+        Leaderboard: [
+          'Rank',
+          'Student Name',
+          'College',
+          'Branch',
+          'Score',
+          'Percentage',
+          'Time Taken',
+          'Completed At',
+          'Event Code',
         ],
         Questions: [
-          'questionId',
-          'question',
-          'optionA',
-          'optionB',
-          'optionC',
-          'optionD',
-          'correctOption',
-          'explanation',
-          'topic',
-          'difficulty',
-          'isActive',
+          '#',
+          'Question',
+          'Option A',
+          'Option B',
+          'Option C',
+          'Option D',
+          'Correct Option',
+          'Explanation',
+          'Topic',
         ],
-        Participants: [
-          'participantId',
-          'eventId',
-          'name',
-          'email',
-          'mobile',
-          'college',
-          'branch',
-          'year',
-          'createdAt',
+        Events: [
+          '#',
+          'Event Code',
+          'Event Name',
+          'College Name',
+          'Duration',
+          'Status',
+          'Created At',
         ],
         Attempts: [
-          'attemptId',
-          'eventId',
-          'participantId',
-          'startedAt',
-          'submittedAt',
-          'score',
-          'percentage',
-          'timeTaken',
-          'status',
-        ],
-        Answers: [
-          'attemptId',
-          'questionId',
-          'selectedOption',
-          'isCorrect',
+          '#',
+          'Student Name',
+          'College',
+          'Score',
+          'Percentage',
+          'Time Taken',
+          'Status',
+          'Submitted At',
+          'Event Code',
         ],
       };
 
       for (const [sheetName, headers] of Object.entries(headersMap)) {
-        await this.appendRows(`${sheetName}!A1`, [headers], 'RAW');
+        await this.updateRange(`${sheetName}!A1:Z1`, [headers]).catch(async () => {
+          // If update fails because range does not exist, attempt append
+          await this.appendRows(`${sheetName}!A1`, [headers], 'RAW').catch(() => {});
+        });
       }
 
-      return { success: true, message: 'Sheet tabs and headers verified successfully' };
+      return { success: true, message: 'Sheet tabs and clean headers verified successfully' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Failed to initialize sheets' };
     }
@@ -121,7 +127,7 @@ export class GoogleSheetsService {
     values: any[][],
     valueInputOption: 'USER_ENTERED' | 'RAW' = 'USER_ENTERED',
   ): Promise<any> {
-    if (!this.isConfigured() || !this.accessToken) {
+    if (!this.isConfigured() || !this.accessToken || !values || values.length === 0) {
       return null;
     }
 
@@ -147,49 +153,62 @@ export class GoogleSheetsService {
   }
 
   /**
-   * Read rows from a specific tab range
+   * Update/overwrite a specific range in the Google Spreadsheet
    */
-  public async readRange(range: string): Promise<any[][] | null> {
-    if (!this.isConfigured() || !this.accessToken) {
+  public async updateRange(
+    range: string,
+    values: any[][],
+    valueInputOption: 'USER_ENTERED' | 'RAW' = 'USER_ENTERED',
+  ): Promise<any> {
+    if (!this.isConfigured() || !this.accessToken || !values || values.length === 0) {
       return null;
     }
 
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(
       this.spreadsheetId,
-    )}/values/${encodeURIComponent(range)}`;
+    )}/values/${encodeURIComponent(range)}?valueInputOption=${valueInputOption}`;
 
     const res = await fetch(url, {
+      method: 'PUT',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ values }),
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Google Sheets API read error (${res.status})`);
+      throw new Error(err.error?.message || `Google Sheets API error (${res.status})`);
     }
 
-    const data = await res.json();
-    return data.values || [];
+    return res.json();
   }
 
   /**
-   * Records a completed quiz submission in a single atomic batch into Attempts and Answers tabs.
-   * This guarantees that during a 500-student event, only 1 batch write occurs per student submission.
+   * Records a student's completed quiz directly into the Participants tab and Leaderboard.
    */
   public async recordCompletedQuiz(
     attempt: {
       id: string;
       eventId: string;
+      eventCode?: string;
       participantId: string;
+      participantName?: string;
+      email?: string;
+      mobile?: string;
+      college?: string;
+      branch?: string;
+      year?: string;
       startedAt: string;
       completedAt: string;
       score: number;
+      totalQuestions?: number;
       percentage: number;
       durationTakenSeconds: number;
       status: string;
     },
-    answers: Array<{
+    _answers?: Array<{
       attemptId: string;
       questionId: string;
       selectedOption: string;
@@ -202,42 +221,58 @@ export class GoogleSheetsService {
     }
 
     try {
-      // 1. Append to Attempts
-      const attemptRow = [
-        attempt.id,
-        attempt.eventId,
-        attempt.participantId,
-        attempt.startedAt,
-        attempt.completedAt,
-        attempt.score,
-        attempt.percentage,
-        attempt.durationTakenSeconds,
-        attempt.status,
-      ];
-      await this.appendRows('Attempts!A:I', [attemptRow]);
+      const durationSec = attempt.durationTakenSeconds || 0;
+      const m = Math.floor(durationSec / 60);
+      const s = durationSec % 60;
+      const durText = m > 0 ? `${m}m ${s}s` : `${s}s`;
+      const dateText = attempt.completedAt
+        ? new Date(attempt.completedAt).toLocaleString('en-IN')
+        : new Date().toLocaleString('en-IN');
 
-      // 2. Append to Answers
-      const answerRows = answers.map((ans) => [
-        ans.attemptId,
-        ans.questionId,
-        ans.selectedOption,
-        ans.isCorrect ? 'TRUE' : 'FALSE',
-      ]);
-      if (answerRows.length > 0) {
-        await this.appendRows('Answers!A:D', answerRows);
-      }
+      // 1. Append clean, readable row straight to Participants tab!
+      const participantRow = [
+        '',
+        attempt.participantName || 'Student',
+        attempt.email || '-',
+        attempt.mobile || '-',
+        attempt.college || 'Engineering College',
+        attempt.branch || '-',
+        attempt.year || '-',
+        `${attempt.score} / ${attempt.totalQuestions || 5}`,
+        `${attempt.percentage}%`,
+        durText,
+        'Completed',
+        dateText,
+        attempt.eventCode || 'DEMO2026',
+      ];
+      await this.appendRows('Participants!A:M', [participantRow]);
+
+      // 2. Also append to Leaderboard tab
+      const leaderboardRow = [
+        '',
+        attempt.participantName || 'Student',
+        attempt.college || 'Engineering College',
+        attempt.branch || '-',
+        `${attempt.score} / ${attempt.totalQuestions || 5}`,
+        `${attempt.percentage}%`,
+        durText,
+        dateText,
+        attempt.eventCode || 'DEMO2026',
+      ];
+      await this.appendRows('Leaderboard!A:I', [leaderboardRow]).catch(() => {});
     } catch (err) {
-      console.warn('Google Sheets background sync failed (local database remains authoritative):', err);
+      console.warn('Google Sheets background sync failed:', err);
     }
   }
 
   /**
-   * Sync participant row to Participants tab
+   * Sync participant row to Participants tab if registered before quiz completion
    */
   public async recordParticipant(participant: {
     id: string;
     eventId?: string;
     event_id?: string;
+    eventCode?: string;
     fullName?: string;
     full_name?: string;
     identifier: string;
@@ -251,19 +286,23 @@ export class GoogleSheetsService {
     if (!this.isConfigured() || !this.accessToken) return;
 
     try {
-      const isEmail = participant.identifier.includes('@');
+      const isEmail = (participant.identifier || '').includes('@');
       const row = [
-        participant.id,
-        participant.eventId || participant.event_id || '',
-        participant.fullName || participant.full_name || '',
-        isEmail ? participant.identifier : '',
-        isEmail ? '' : participant.identifier,
-        participant.collegeName || participant.college_name || '',
-        participant.branch || '',
-        participant.year || '',
-        participant.createdAt || participant.created_at || new Date().toISOString(),
+        '',
+        participant.fullName || participant.full_name || 'Student',
+        isEmail ? participant.identifier : '-',
+        isEmail ? '-' : participant.identifier,
+        participant.collegeName || participant.college_name || 'Engineering College',
+        participant.branch || '-',
+        participant.year || '-',
+        'In Progress',
+        '-',
+        '-',
+        'In Progress',
+        new Date().toLocaleString('en-IN'),
+        participant.eventCode || 'DEMO2026',
       ];
-      await this.appendRows('Participants!A:I', [row]);
+      await this.appendRows('Participants!A:M', [row]);
     } catch (err) {
       console.warn('Google Sheets participant sync error:', err);
     }
@@ -287,94 +326,130 @@ export class GoogleSheetsService {
 
     let totalRows = 0;
 
-    // Events
-    if (data.events && data.events.length > 0) {
-      const eventRows = data.events.map((e) => [
-        e.id,
-        e.event_code,
-        e.event_name,
-        e.college_name,
-        e.description,
-        e.duration_seconds,
-        e.is_active ? 'active' : 'inactive',
-        e.leaderboard_enabled ? 'true' : 'false',
-        e.created_at,
-      ]);
-      await this.appendRows('Events!A:I', eventRows);
-      totalRows += eventRows.length;
-    }
+    const formatDuration = (seconds?: number) => {
+      if (!seconds || seconds <= 0) return '-';
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    };
 
-    // Questions
-    if (data.questions && data.questions.length > 0) {
-      const questionRows = data.questions.map((q) => [
-        q.id,
-        q.question,
-        q.option_a,
-        q.option_b,
-        q.option_c,
-        q.option_d,
-        q.correct_answer,
-        q.explanation,
-        q.topic,
-        q.difficulty,
-        q.is_active ? 'true' : 'false',
-      ]);
-      await this.appendRows('Questions!A:K', questionRows);
-      totalRows += questionRows.length;
-    }
+    const formatDate = (isoString?: string | null) => {
+      if (!isoString) return '-';
+      try {
+        return new Date(isoString).toLocaleString('en-IN', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+      } catch {
+        return isoString;
+      }
+    };
 
-    // Participants
+    // 1. Tab: Participants & Results (All-in-one comprehensive sheet)
     if (data.participants && data.participants.length > 0) {
-      const participantRows = data.participants.map((p) => {
+      const participantRows = data.participants.map((p, idx) => {
         const isEmail = (p.identifier || '').includes('@');
+        const att = (data.quiz_attempts || []).find(
+          (a) => a.participant_id === p.id || a.participantId === p.id,
+        );
+        const ev = (data.events || []).find((e) => e.id === p.event_id);
+        const durationSec = att?.duration_taken_seconds || att?.durationTakenSeconds || 0;
+        const durText = formatDuration(durationSec);
+        const dateText = formatDate(att?.completed_at || att?.started_at || p.created_at);
+
+        const scoreText = att
+          ? (att.status === 'completed' ? `${att.score} / ${att.total_questions || 5}` : 'In Progress')
+          : 'Registered';
+        const pctText = att && att.status === 'completed' ? `${att.percentage}%` : '-';
+        const statusText = att?.status === 'completed' ? 'Completed' : (att ? 'In Progress' : 'Registered');
+
         return [
-          p.id,
-          p.event_id,
-          p.full_name,
-          isEmail ? p.identifier : '',
-          isEmail ? '' : p.identifier,
-          p.college_name,
-          p.branch || '',
-          p.year || '',
-          p.created_at,
+          idx + 1,
+          p.full_name || p.name || 'Student',
+          isEmail ? p.identifier : (p.email || '-'),
+          isEmail ? (p.mobile || '-') : p.identifier,
+          p.college_name || p.college || 'Engineering College',
+          p.branch || '-',
+          p.year || '-',
+          scoreText,
+          pctText,
+          durText,
+          statusText,
+          dateText,
+          ev?.event_code || p.event_code || 'DEMO2026',
         ];
       });
-      await this.appendRows('Participants!A:I', participantRows);
+
+      await this.appendRows('Participants!A:M', participantRows);
       totalRows += participantRows.length;
     }
 
-    // Attempts
-    if (data.quiz_attempts && data.quiz_attempts.length > 0) {
-      const attemptRows = data.quiz_attempts.map((a) => [
-        a.id,
-        a.event_id,
-        a.participant_id,
-        a.started_at,
-        a.completed_at || '',
-        a.score ?? '',
-        a.percentage ?? '',
-        a.duration_taken_seconds ?? '',
-        a.status,
-      ]);
-      await this.appendRows('Attempts!A:I', attemptRows);
-      totalRows += attemptRows.length;
+    // 2. Tab: Leaderboard
+    const completedAttempts = (data.quiz_attempts || [])
+      .filter((a) => a.status === 'completed')
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return (a.duration_taken_seconds || 999) - (b.duration_taken_seconds || 999);
+      });
+
+    if (completedAttempts.length > 0) {
+      const leaderboardRows = completedAttempts.map((a, idx) => {
+        const p = (data.participants || []).find((part) => part.id === a.participant_id);
+        const ev = (data.events || []).find((e) => e.id === a.event_id);
+        const durationSec = a.duration_taken_seconds || 0;
+        const durText = formatDuration(durationSec);
+        const dateText = formatDate(a.completed_at);
+
+        return [
+          idx + 1,
+          p ? (p.full_name || p.name) : 'Student',
+          p ? (p.college_name || p.college) : 'Engineering College',
+          p?.branch || '-',
+          `${a.score} / ${a.total_questions || 5}`,
+          `${a.percentage}%`,
+          durText,
+          dateText,
+          ev?.event_code || 'DEMO2026',
+        ];
+      });
+      await this.appendRows('Leaderboard!A:I', leaderboardRows).catch(() => {});
     }
 
-    // Answers
-    if (data.attempt_answers && data.attempt_answers.length > 0) {
-      const answerRows = data.attempt_answers.map((ans) => [
-        ans.attempt_id,
-        ans.question_id,
-        ans.selected_option || '',
-        ans.is_correct ? 'TRUE' : 'FALSE',
+    // 3. Tab: Questions
+    if (data.questions && data.questions.length > 0) {
+      const questionRows = data.questions.map((q, idx) => [
+        idx + 1,
+        q.question || '',
+        q.option_a || '',
+        q.option_b || '',
+        q.option_c || '',
+        q.option_d || '',
+        q.correct_answer ? `Option ${q.correct_answer}` : '',
+        q.explanation || '',
+        q.topic || 'AI & Engineering',
       ]);
-      await this.appendRows('Answers!A:D', answerRows);
-      totalRows += answerRows.length;
+      await this.appendRows('Questions!A:I', questionRows);
+      totalRows += questionRows.length;
+    }
+
+    // 4. Tab: Events
+    if (data.events && data.events.length > 0) {
+      const eventRows = data.events.map((e, idx) => [
+        idx + 1,
+        e.event_code || '',
+        e.event_name || '',
+        e.college_name || '',
+        `${Math.round((e.duration_seconds || 300) / 60)} Minutes`,
+        e.is_active ? 'Active' : 'Inactive',
+        formatDate(e.created_at),
+      ]);
+      await this.appendRows('Events!A:G', eventRows);
+      totalRows += eventRows.length;
     }
 
     return {
       success: true,
-      message: `Successfully synchronized ${totalRows} records across all 5 sheets.`,
+      message: `Successfully synchronized ${totalRows} records! Open your sheet to see participants with their live quiz scores and rankings.`,
       rowsSynced: totalRows,
     };
   }

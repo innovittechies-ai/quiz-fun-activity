@@ -311,11 +311,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setIsConnectingSheets(true);
     try {
+      // Ensure latest student attempts are loaded
+      let currentAttempts = attempts;
+      if (!currentAttempts || currentAttempts.length === 0) {
+        try {
+          currentAttempts = await api.admin.getAttempts(token, selectedEventCode || 'DEMO2026');
+          setAttempts(currentAttempts);
+        } catch (e) {
+          console.warn('Could not fetch attempts for sync:', e);
+        }
+      }
+
       const rawData = {
         events,
         questions,
         participants: [],
-        attempts,
+        attempts: currentAttempts,
         answers: [],
       };
       const directRes = await GoogleSheetsClient.syncAllData(sheetId, googleAccessToken, rawData);
@@ -1571,88 +1582,97 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
 
-          {/* 5 Sheet Tabs Schema */}
+          {/* Simple, Human-Readable Google Sheets Structure */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Layers className="w-4 h-4 text-cyan-400" />
-                Google Sheets Structure (5 Tabs)
+                Google Sheets Structure (Straightforward &amp; Clean &bull; Zero Raw UUIDs)
               </h3>
-              <span className="text-[11px] text-slate-400">Strictly structured for non-technical event coordinators</span>
+              <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                Organized for College Event Faculty &amp; Coordinators
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {/* Sheet 1: Events */}
+              {/* Sheet 1: Participants & Results */}
+              <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-emerald-300 font-mono flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    1. Participants &amp; Results
+                  </span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                    Primary Tab &bull; 13 Columns
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mb-2 font-medium">
+                  Complete student details with live quiz scores, percentage, and time taken in one clean row.
+                </p>
+                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 font-mono text-[10px] text-emerald-300 space-y-0.5">
+                  <div className="text-white font-bold">#, Student Name, Email, Mobile</div>
+                  <div>College, Branch, Year</div>
+                  <div className="text-cyan-300 font-semibold">Score (e.g. 4 / 5), Percentage (80%)</div>
+                  <div>Time Taken (e.g. 1m 45s), Status (Completed)</div>
+                  <div className="text-slate-400">Submitted At, Event Code</div>
+                </div>
+              </div>
+
+              {/* Sheet 2: Leaderboard */}
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-indigo-300 font-mono">1. Events</span>
+                  <span className="text-xs font-bold text-amber-300 font-mono">2. Leaderboard</span>
                   <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mb-2">Each engineering college event &amp; its code.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>eventId, eventCode, eventName</div>
-                  <div>collegeName, description</div>
-                  <div>durationSeconds, status</div>
-                  <div>leaderboardEnabled, createdAt</div>
+                <p className="text-[11px] text-slate-400 mb-2">Ranked leaderboard sorted by highest score &amp; fastest completion.</p>
+                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-amber-300 space-y-0.5">
+                  <div>Rank (1, 2, 3...) &bull; Student Name</div>
+                  <div>College &bull; Branch</div>
+                  <div>Score &bull; Percentage &bull; Time Taken</div>
+                  <div>Completed At &bull; Event Code</div>
                 </div>
               </div>
 
-              {/* Sheet 2: Questions */}
+              {/* Sheet 3: Questions */}
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-cyan-300 font-mono">2. Questions</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">11 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">MCQ question bank with 4 options &amp; correct answer.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>questionId, question</div>
-                  <div>optionA, optionB, optionC, optionD</div>
-                  <div>correctOption, explanation</div>
-                  <div>topic, difficulty, isActive</div>
-                </div>
-              </div>
-
-              {/* Sheet 3: Participants */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-emerald-300 font-mono">3. Participants</span>
+                  <span className="text-xs font-bold text-cyan-300 font-mono">3. Questions</span>
                   <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mb-2">Student identity and registration records.</p>
+                <p className="text-[11px] text-slate-400 mb-2">MCQ question bank with options, answer &amp; explanation.</p>
                 <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>participantId, eventId, name</div>
-                  <div>email, mobile</div>
-                  <div>college, branch, year</div>
-                  <div>createdAt</div>
+                  <div>#, Question</div>
+                  <div>Option A, Option B, Option C, Option D</div>
+                  <div className="text-cyan-300">Correct Option &bull; Explanation</div>
+                  <div>Topic</div>
                 </div>
               </div>
 
-              {/* Sheet 4: Attempts */}
+              {/* Sheet 4: Events */}
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-amber-300 font-mono">4. Attempts</span>
+                  <span className="text-xs font-bold text-indigo-300 font-mono">4. Events</span>
+                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">7 columns</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mb-2">College events summary and active time limits.</p>
+                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
+                  <div>#, Event Code, Event Name</div>
+                  <div>College Name, Duration, Status, Created At</div>
+                </div>
+              </div>
+
+              {/* Sheet 5: Attempts (Clean) */}
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-violet-300 font-mono">5. Attempts</span>
                   <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">9 columns</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mb-2">Server-scored quiz attempts with elapsed time.</p>
+                <p className="text-[11px] text-slate-400 mb-2">Individual submission records with student names.</p>
                 <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>attemptId, eventId, participantId</div>
-                  <div>startedAt, submittedAt</div>
-                  <div>score, percentage, timeTaken</div>
-                  <div>status</div>
-                </div>
-              </div>
-
-              {/* Sheet 5: Answers */}
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-rose-300 font-mono">5. Answers</span>
-                  <span className="text-[10px] text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">4 columns</span>
-                </div>
-                <p className="text-[11px] text-slate-400 mb-2">Student selected answers per question.</p>
-                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 font-mono text-[10px] text-slate-300 space-y-0.5">
-                  <div>attemptId, questionId</div>
-                  <div>selectedOption (A / B / C / D)</div>
-                  <div>isCorrect (TRUE / FALSE)</div>
+                  <div>#, Student Name, College</div>
+                  <div>Score, Percentage, Time Taken, Status</div>
+                  <div>Submitted At, Event Code</div>
                 </div>
               </div>
 
@@ -1664,7 +1684,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     High-Concurrency Architecture
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    No API writes on individual question clicks. Answers remain in browser state until the final 1-click batch submission.
+                    Students answer freely on their phones. Scores are atomic and synced cleanly to Google Sheets when they submit.
                   </p>
                 </div>
                 <div className="mt-3 pt-2 border-t border-indigo-900/50 flex items-center justify-between text-[10px] text-indigo-300">

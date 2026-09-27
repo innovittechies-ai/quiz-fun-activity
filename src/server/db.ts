@@ -643,14 +643,23 @@ class DatabaseStore {
         };
       });
 
+      const isEmail = (participant.identifier || '').includes('@');
       googleSheetsService.recordCompletedQuiz(
         {
           id: attempt.id,
           eventId: attempt.event_id,
+          eventCode: event.event_code,
           participantId: attempt.participant_id,
+          participantName: participant.full_name,
+          email: isEmail ? participant.identifier : '',
+          mobile: isEmail ? '' : participant.identifier,
+          college: participant.college_name,
+          branch: participant.branch || '',
+          year: participant.year || '',
           startedAt: attempt.started_at,
           completedAt: attempt.completed_at,
           score: attempt.score,
+          totalQuestions,
           percentage: attempt.percentage,
           durationTakenSeconds: attempt.duration_taken_seconds,
           status: attempt.status,
