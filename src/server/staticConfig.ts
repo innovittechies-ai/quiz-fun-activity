@@ -7,7 +7,7 @@ import { SAMPLE_QUESTIONS } from './sampleQuestions.js';
  *
  * Each event picks a subset of question ids from the question bank.
  */
-const DEMO_QIDS = SAMPLE_QUESTIONS.slice(0, 5).map((q) => q.id);
+const DEMO_QIDS = SAMPLE_QUESTIONS.map((q) => q.id);
 
 export const STATIC_EVENTS: Event[] = [
   {

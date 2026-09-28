@@ -68,16 +68,44 @@ export class SupabaseDatabaseStore {
     return list;
   }
   async getQuestionById(id: string): Promise<Question | null> { return SAMPLE_QUESTIONS.find((q) => q.id === id) || null; }
-  async getClientQuestionsForEvent(event: Event): Promise<ClientQuestion[]> {
+
+  // Deterministic seeded shuffle so the SAME student always gets the SAME 5 questions
+  // (needed for scoring consistency at submit time), while DIFFERENT students get
+  // DIFFERENT questions — reducing cheating between neighbors.
+  private seededShuffle<T>(arr: T[], seed: string): T[] {
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619); }
+    let a = h >>> 0;
+    const rng = () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const out = [...arr];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+
+  async getClientQuestionsForEvent(event: Event, seed?: string): Promise<ClientQuestion[]> {
+    const pool = SAMPLE_QUESTIONS.filter((q) => q.is_active);
+    const toClient = (q: Question): ClientQuestion => ({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
+
+    // Seeded path: deterministically pick 5 from the full active pool per student.
+    if (seed) {
+      const ordered = this.seededShuffle(pool, seed);
+      return ordered.slice(0, 5).map(toClient);
+    }
+
+    // Non-seeded fallback (admin/compatibility): use the event's declared question_ids,
+    // backfilling from the active pool if fewer than 5.
     const questions: ClientQuestion[] = [];
     for (const qId of event.question_ids) {
       const q = await this.getQuestionById(qId);
-      if (q && q.is_active) questions.push({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
+      if (q && q.is_active) questions.push(toClient(q));
     }
     if (questions.length < 5) {
-      for (const q of SAMPLE_QUESTIONS) {
+      for (const q of pool) {
         if (questions.length >= 5) break;
-        if (q.is_active && !questions.some((e) => e.id === q.id)) questions.push({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
+        if (!questions.some((e) => e.id === q.id)) questions.push(toClient(q));
       }
     }
     return questions;
@@ -116,7 +144,7 @@ export class SupabaseDatabaseStore {
     const isEmail = normId.includes('@');
     const docId = pDocId(event.event_code, normId);
     const existing = await this.getParticipantById(docId);
-    const clientQuestions = await this.getClientQuestionsForEvent(event);
+    const clientQuestions = await this.getClientQuestionsForEvent(event, normId);
 
     if (existing) {
       const p = existing;
@@ -171,7 +199,7 @@ export class SupabaseDatabaseStore {
     if (!event) throw new Error('Event not found');
 
     const answers: Record<string, OptionLetter> = { ...(p.answers || {}), ...(answersOverride || {}) };
-    const clientQuestions = await this.getClientQuestionsForEvent(event);
+    const clientQuestions = await this.getClientQuestionsForEvent(event, p.identifier);
     let correctCount = 0;
     const questionResults = [];
     for (const cq of clientQuestions) {
@@ -204,7 +232,7 @@ export class SupabaseDatabaseStore {
     if (!p || p.status !== 'completed') return null;
     const event = await this.getEventById(p.event_id);
     if (!event) return null;
-    const clientQuestions = await this.getClientQuestionsForEvent(event);
+    const clientQuestions = await this.getClientQuestionsForEvent(event, p.identifier);
     const questionResults = [];
     for (const cq of clientQuestions) {
       const q = await this.getQuestionById(cq.id);
