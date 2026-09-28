@@ -26,7 +26,9 @@ import {
   FileQuestion,
   Lock,
   LogOut,
+  Gift,
 } from 'lucide-react';
+import { SpinWheel } from './SpinWheel.js';
 // NOTE: Google sign-in removed — simple username + password login only.
 
 interface AdminPanelProps {
@@ -53,8 +55,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Tabs: 'overview' | 'events' | 'questions' | 'participants'
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants'>('overview');
+  // Tabs: 'overview' | 'events' | 'questions' | 'participants' | 'luckydraw'
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants' | 'luckydraw'>('overview');
 
   // Data states
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -188,7 +190,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   }, [token, selectedEventCode]);
 
   useEffect(() => {
-    if (token && activeTab === 'participants') {
+    if (token && (activeTab === 'participants' || activeTab === 'luckydraw')) {
       loadAttempts();
     }
   }, [token, activeTab, selectedEventCode, loadAttempts]);
@@ -574,6 +576,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         >
           <Users className="w-4 h-4" />
           <span>Participants & Attempts</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('luckydraw')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+            activeTab === 'luckydraw'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <Gift className="w-4 h-4" />
+          <span>Lucky Draw</span>
         </button>
       </div>
 
@@ -1070,6 +1084,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: LUCKY DRAW (Admin-only T-shirt giveaway wheel) */}
+      {activeTab === 'luckydraw' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white">Lucky Draw &mdash; T-Shirt Giveaway</h2>
+              <p className="text-xs text-slate-400">
+                Spin the wheel to pick a winner from completed participants. Admin-only, one-time per event.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedEventCode}
+                onChange={(e) => setSelectedEventCode(e.target.value)}
+                className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-bold text-cyan-300 cursor-pointer"
+              >
+                {events.map((ev) => (
+                  <option key={ev.event_code} value={ev.event_code}>
+                    {ev.event_code} - {ev.college_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-gradient-to-b from-emerald-50 to-green-100 border border-emerald-200 shadow-xl">
+            <SpinWheel
+              participants={attempts.filter((a) => a.status === 'completed')}
+              eventCode={selectedEventCode}
+            />
           </div>
         </div>
       )}
