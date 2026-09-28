@@ -443,12 +443,13 @@ app.delete('/api/admin/attempts/:eventCode/all', requireAdmin, async (req: Reque
 app.get('/api/admin/export/:eventCode', requireAdmin, async (req: Request, res: Response) => {
   try {
     const csv = await db.exportEventCSV(req.params.eventCode);
-    res.setHeader('Content-Type', 'text/csv');
+    // Prepend UTF-8 BOM so Excel correctly renders special characters / Indian names.
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="innovit_quiz_${req.params.eventCode.toLowerCase()}_results.csv"`,
     );
-    res.send(csv);
+    res.send('\uFEFF' + csv);
   } catch (err: any) {
     res.status(404).json({ error: err.message });
   }

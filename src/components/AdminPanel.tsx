@@ -67,6 +67,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [selectedEventCode, setSelectedEventCode] = useState<string>('DEMO2026');
   const [attempts, setAttempts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [csvExporting, setCsvExporting] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Modals
@@ -405,15 +406,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   // CSV download
-  const handleExportCSV = () => {
-    if (!selectedEventCode) return;
-    const url = api.admin.getExportUrl(token, selectedEventCode);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `innovit_quiz_${selectedEventCode.toLowerCase()}_results.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportCSV = async () => {
+    if (!selectedEventCode || !token) return;
+    setCsvExporting(true);
+    try {
+      const res = await fetch(api.admin.getExportUrl(token, selectedEventCode), {
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Export failed (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `innovit_quiz_${selectedEventCode.toLowerCase()}_results.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // Revoke the blob URL on the next tick to release memory
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showNotification(`CSV exported for ${selectedEventCode}.`);
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to export CSV', 'error');
+    } finally {
+      setCsvExporting(false);
+    }
   };
 
   // Login view if unauthorized
@@ -1027,11 +1046,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               <button
                 onClick={handleExportCSV}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                disabled={csvExporting}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-wait text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                 title="Download CSV for College Coordinators"
               >
                 <Download className="w-4 h-4" />
-                <span>Export CSV</span>
+                <span>{csvExporting ? 'Exporting…' : 'Export CSV'}</span>
               </button>
 
               <button
