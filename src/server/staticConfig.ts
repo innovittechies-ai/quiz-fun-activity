@@ -16,8 +16,8 @@ export const STATIC_EVENTS: Event[] = [
     college_name: 'Gyan Sagar College of Engineering',
     event_code: 'DEMO2026',
     description:
-      'Test your understanding of modern Artificial Intelligence, Machine Learning, and Generative models in 5 quick questions.',
-    duration_seconds: 300,
+      'Test your understanding of modern Artificial Intelligence, Machine Learning, Generative AI, and Agentic AI in 10 quick questions.',
+    duration_seconds: 600,
     is_active: true,
     leaderboard_enabled: true,
     question_ids: DEMO_QIDS,

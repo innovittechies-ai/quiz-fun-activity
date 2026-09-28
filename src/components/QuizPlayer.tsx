@@ -300,7 +300,7 @@ export const QuizPlayer: React.FC<QuizPlayerProps> = ({
             onClick={() => setShowConfirmModal(true)}
             className="text-xs text-emerald-400 hover:text-emerald-300 font-medium underline underline-offset-4 cursor-pointer"
           >
-            All 5 questions answered! Click here to review and submit now &rarr;
+            All {questions.length} questions answered! Click here to review and submit now &rarr;
           </button>
         </div>
       )}

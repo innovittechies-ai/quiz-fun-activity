@@ -36,13 +36,10 @@ export default function App() {
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
 
-  // Code input on Home screen
-  const [homeCodeInput, setHomeCodeInput] = useState('');
-
   // Landing Page QR Code State
   const [landingQrUrl, setLandingQrUrl] = useState<string>('');
 
-  const effectiveLandingCode = (homeCodeInput.trim() || activeEventCode || 'DEMO2026').toUpperCase();
+  const effectiveLandingCode = (activeEventCode || 'DEMO2026').toUpperCase();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -204,13 +201,6 @@ export default function App() {
     setAttemptId(null);
   };
 
-  const handleHomeSubmitCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!homeCodeInput.trim()) return;
-    const cleanCode = homeCodeInput.trim().toUpperCase();
-    navigate('quiz', cleanCode);
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Hide standard navbar in Fullscreen Projector mode for clean presentation */}
@@ -304,40 +294,41 @@ export default function App() {
 
         {/* VIEW: HOME / LANDING */}
         {currentView === 'home' && (
-          <div className="max-w-4xl mx-auto px-4 py-10 sm:py-16">
+          <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-emerald-50 via-green-50 to-emerald-100">
+            <div className="max-w-4xl mx-auto px-4 py-10 sm:py-16">
             {/* Hero Banner */}
             <div className="text-center relative">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-indigo-500/15 blur-[120px] rounded-full pointer-events-none" />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-80 bg-emerald-300/30 blur-[120px] rounded-full pointer-events-none" />
 
               <div className="relative z-10">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-bold uppercase tracking-wider mb-6">
-                  <Award className="w-4 h-4 text-cyan-400" />
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-6">
+                  <Award className="w-4 h-4 text-emerald-600" />
                   Innovit Engineering College Events
                 </div>
 
-                <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white mb-4">
+                <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-emerald-900 mb-4">
                   INNOVIT{' '}
-                  <span className="bg-gradient-to-r from-cyan-400 via-indigo-300 to-white bg-clip-text text-transparent">
+                  <span className="bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-800 bg-clip-text text-transparent">
                     AI CHALLENGE
                   </span>
                 </h1>
 
-                <p className="text-lg sm:text-xl text-slate-300 font-medium max-w-xl mx-auto mb-8">
+                <p className="text-lg sm:text-xl text-slate-700 font-medium max-w-xl mx-auto mb-8">
                   "How well do you really understand AI?"
-                  <span className="block text-sm text-slate-400 mt-2 font-normal">
-                    5 technically meaningful AI questions &bull; 5-minute server countdown &bull; Instant scoring.
+                  <span className="block text-sm text-slate-500 mt-2 font-normal">
+                    10 technically meaningful AI questions &bull; 10-minute server countdown &bull; Instant scoring.
                   </span>
                 </p>
 
                 {/* HERO QR CODE & FAST SCAN JOIN */}
-                <div className="max-w-2xl mx-auto mb-8 p-6 rounded-3xl bg-slate-900/90 border border-indigo-500/40 shadow-2xl backdrop-blur-md relative overflow-hidden">
-                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-                  <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="max-w-2xl mx-auto mb-8 p-6 rounded-3xl bg-white border border-emerald-200 shadow-xl shadow-emerald-200/50 relative overflow-hidden">
+                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-200/40 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-green-200/40 rounded-full blur-3xl pointer-events-none" />
 
                   <div className="flex flex-col md:flex-row items-center gap-6">
                     {/* QR Code Container */}
                     <div className="shrink-0 flex flex-col items-center">
-                      <div className="relative group p-3.5 bg-white rounded-2xl shadow-xl shadow-indigo-950/50 border-2 border-indigo-400/40">
+                      <div className="relative group p-3.5 bg-white rounded-2xl shadow-lg shadow-emerald-200/50 border-2 border-emerald-300">
                         {landingQrUrl ? (
                           <img
                             src={landingQrUrl}
@@ -345,12 +336,12 @@ export default function App() {
                             className="w-48 h-48 sm:w-52 sm:h-52 object-contain rounded-lg"
                           />
                         ) : (
-                          <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center bg-slate-100 rounded-lg">
-                            <QrCode className="w-12 h-12 text-slate-400 animate-pulse" />
+                          <div className="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center bg-emerald-50 rounded-lg">
+                            <QrCode className="w-12 h-12 text-emerald-400 animate-pulse" />
                           </div>
                         )}
-                        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-md border border-indigo-400/50 flex items-center gap-1 shrink-0 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        <span className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white shadow-md border border-emerald-400/50 flex items-center gap-1 shrink-0 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-200 animate-ping" />
                           Scan with Mobile
                         </span>
                       </div>
@@ -358,11 +349,11 @@ export default function App() {
 
                     {/* QR Details & Action Controls */}
                     <div className="flex-1 text-center md:text-left space-y-3">
-                      <h3 className="text-xl font-black text-white">
+                      <h3 className="text-xl font-black text-emerald-900">
                         Scan with Phone Camera to Start
                       </h3>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        Point your phone camera at this QR code to open the registration form and start the 5-minute timed challenge instantly.
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        Point your phone camera at this QR code to open the registration form and start the 10-minute timed challenge instantly.
                       </p>
 
                       {/* Quick Action Button */}
@@ -370,7 +361,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => navigate('quiz', effectiveLandingCode)}
-                          className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer transition-all"
+                          className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer transition-all"
                         >
                           <span>Start on this Device</span>
                           <ArrowRight className="w-4 h-4" />
@@ -380,55 +371,34 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Event Code Form */}
-                <form
-                  onSubmit={handleHomeSubmitCode}
-                  className="max-w-md mx-auto mb-10 flex flex-col sm:flex-row gap-2"
-                >
-                  <input
-                    type="text"
-                    required
-                    value={homeCodeInput}
-                    onChange={(e) => setHomeCodeInput(e.target.value.toUpperCase())}
-                    placeholder="Enter College Event Code (e.g. DEMO2026)"
-                    className="flex-1 px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white placeholder-slate-500 font-mono text-center sm:text-left text-sm uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
-                  >
-                    <span>Enter Quiz</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </form>
-
                 {/* Features Highlights */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto mt-12 pt-8 border-t border-slate-800/80 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto mt-12 pt-8 border-t border-emerald-200 text-left">
                   <div className="p-3">
-                    <Clock className="w-5 h-5 text-amber-400 mb-1.5" />
-                    <h4 className="text-xs font-bold text-white">Server-Timed</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <Clock className="w-5 h-5 text-amber-500 mb-1.5" />
+                    <h4 className="text-xs font-bold text-emerald-900">Server-Timed</h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
                       Accurate countdown tracked on the database; page refreshes resume smoothly.
                     </p>
                   </div>
 
                   <div className="p-3">
-                    <Award className="w-5 h-5 text-emerald-400 mb-1.5" />
-                    <h4 className="text-xs font-bold text-white">Strict Scoring</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <Award className="w-5 h-5 text-emerald-600 mb-1.5" />
+                    <h4 className="text-xs font-bold text-emerald-900">Strict Scoring</h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
                       Evaluated strictly on the server; client answers are never trusted.
                     </p>
                   </div>
 
                   <div className="p-3">
-                    <Shield className="w-5 h-5 text-indigo-400 mb-1.5" />
-                    <h4 className="text-xs font-bold text-white">1 Attempt Policy</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <Shield className="w-5 h-5 text-emerald-700 mb-1.5" />
+                    <h4 className="text-xs font-bold text-emerald-900">1 Attempt Policy</h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
                       Database enforces unique phone/email check with admin reset capabilities.
                     </p>
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         )}

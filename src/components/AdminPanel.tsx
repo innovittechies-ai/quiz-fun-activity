@@ -196,13 +196,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   // Event modal openers
   const openCreateEventModal = () => {
     setEditingEvent(null);
-    const defaultQIds = questions.slice(0, 5).map((q) => q.id);
+    const defaultQIds = questions.slice(0, 10).map((q) => q.id);
     setEventForm({
       event_name: 'Innovit AI Challenge',
       college_name: 'Gyan Sagar College of Engineering',
       event_code: `GSCE${new Date().getFullYear()}`,
-      description: 'How well do you really understand AI? 5 questions in 5 minutes.',
-      duration_seconds: 300,
+      description: 'How well do you really understand AI? 10 questions in 10 minutes.',
+      duration_seconds: 600,
       leaderboard_enabled: true,
       is_active: true,
       question_ids: defaultQIds,
@@ -1134,7 +1134,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) =>
                       setEventForm({ ...eventForm, duration_seconds: parseInt(e.target.value) || 300 })
                     }
-                    placeholder="300 (5 mins)"
+                    placeholder="600 (10 mins)"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white font-mono"
                   />
                 </div>
@@ -1146,7 +1146,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   rows={2}
                   value={eventForm.description}
                   onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
-                  placeholder="How well do you really understand AI? 5 questions in 5 minutes."
+                    placeholder="How well do you really understand AI? 10 questions in 10 minutes."
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 />
               </div>
@@ -1180,7 +1180,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <label className="text-slate-300 font-semibold">
                     Select Questions ({eventForm.question_ids.length} selected)
                   </label>
-                  <span className="text-[11px] text-slate-500">Pick 5 questions for standard quiz</span>
+                  <span className="text-[11px] text-slate-500">Pick 10 questions for standard quiz</span>
                 </div>
                 <div className="max-h-48 overflow-y-auto p-2 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
                   {questions.map((q) => {

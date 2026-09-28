@@ -89,22 +89,22 @@ export class SupabaseDatabaseStore {
     const pool = SAMPLE_QUESTIONS.filter((q) => q.is_active);
     const toClient = (q: Question): ClientQuestion => ({ id: q.id, question: q.question, option_a: q.option_a, option_b: q.option_b, option_c: q.option_c, option_d: q.option_d, topic: q.topic, difficulty: q.difficulty });
 
-    // Seeded path: deterministically pick 5 from the full active pool per student.
+    // Seeded path: deterministically pick 10 from the full active pool per student.
     if (seed) {
       const ordered = this.seededShuffle(pool, seed);
-      return ordered.slice(0, 5).map(toClient);
+      return ordered.slice(0, 10).map(toClient);
     }
 
     // Non-seeded fallback (admin/compatibility): use the event's declared question_ids,
-    // backfilling from the active pool if fewer than 5.
+    // backfilling from the active pool if fewer than 10.
     const questions: ClientQuestion[] = [];
     for (const qId of event.question_ids) {
       const q = await this.getQuestionById(qId);
       if (q && q.is_active) questions.push(toClient(q));
     }
-    if (questions.length < 5) {
+    if (questions.length < 10) {
       for (const q of pool) {
-        if (questions.length >= 5) break;
+        if (questions.length >= 10) break;
         if (!questions.some((e) => e.id === q.id)) questions.push(toClient(q));
       }
     }

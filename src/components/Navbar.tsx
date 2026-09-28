@@ -9,14 +9,14 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, activeEventCode }) => {
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 w-full border-b border-emerald-200 bg-white/90 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand Logo - links to Innovit Technologies */}
         <a
           href="https://www.innovittechnologies.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 focus:outline-none group"
+          className="flex items-center gap-2 focus:outline-none group bg-white rounded-lg px-1.5 py-1"
           title="Visit Innovit Technologies"
         >
           <img
@@ -33,8 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, activeE
               onClick={() => onNavigate('quiz', activeEventCode)}
               className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
                 currentView === 'quiz'
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-500/30'
+                  : 'text-emerald-800 hover:text-emerald-600 hover:bg-emerald-50'
               }`}
             >
               <Home className="w-3.5 h-3.5" />
@@ -42,17 +42,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, activeE
             </button>
           )}
 
-          <div className="h-5 w-[1px] bg-slate-800 mx-1 hidden sm:block" />
+          <div className="h-5 w-[1px] bg-emerald-200 mx-1 hidden sm:block" />
 
           <button
             onClick={() => onNavigate('admin')}
             className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border ${
               currentView === 'admin'
-                ? 'bg-slate-800 text-indigo-400 border-indigo-500/40 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 border-slate-800 hover:bg-slate-900'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-sm'
+                : 'text-emerald-700 hover:text-emerald-600 border-emerald-200 hover:bg-emerald-50'
             }`}
           >
-            <Shield className="w-3.5 h-3.5 text-indigo-400" />
+            <Shield className="w-3.5 h-3.5 text-emerald-600" />
             <span>Admin</span>
           </button>
         </nav>
