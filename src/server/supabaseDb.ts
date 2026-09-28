@@ -255,6 +255,21 @@ export class SupabaseDatabaseStore {
     await client().from(TABLE).update({ status: 'reset', score: 0, percentage: 0, completed_at: null, duration_seconds: null, answers: {} }).eq('id', attemptId);
   }
 
+  async deleteAttempt(attemptId: string): Promise<void> {
+    const p = await this.getParticipantById(attemptId);
+    if (!p) throw new Error('Attempt not found');
+    await client().from(TABLE).delete().eq('id', attemptId);
+  }
+
+  async deleteAllAttempts(eventCode: string): Promise<{ deleted: number }> {
+    const event = await this.getEventByCode(eventCode);
+    if (!event) throw new Error('Event not found');
+    const existing = await client().from(TABLE).select('id', { count: 'exact', head: true }).eq('event_code', event.event_code);
+    const count = (existing as any)?.count ?? 0;
+    await client().from(TABLE).delete().eq('event_code', event.event_code);
+    return { deleted: count };
+  }
+
   async getLeaderboard(eventCode: string): Promise<{ event: any; leaderboard: LeaderboardEntry[] }> {
     const event = await this.getEventByCode(eventCode);
     if (!event) throw new Error('Event not found');

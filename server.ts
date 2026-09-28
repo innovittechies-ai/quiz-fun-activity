@@ -419,6 +419,26 @@ app.post('/api/admin/attempts/:id/reset', requireAdmin, async (req: Request, res
   }
 });
 
+// Admin Delete Single Attempt (permanent)
+app.delete('/api/admin/attempts/:id', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    await db.deleteAttempt(req.params.id);
+    res.json({ success: true, message: 'Student record has been deleted successfully.' });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Admin Delete All Attempts for an Event (fresh start for a new event)
+app.delete('/api/admin/attempts/:eventCode/all', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await db.deleteAllAttempts(req.params.eventCode);
+    res.json({ success: true, message: `Deleted ${result.deleted} student record(s) for event.`, deleted: result.deleted });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // Admin Export Event Results to CSV
 app.get('/api/admin/export/:eventCode', requireAdmin, async (req: Request, res: Response) => {
   try {

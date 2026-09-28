@@ -719,6 +719,24 @@ class DatabaseStore {
     this.persist();
   }
 
+  public deleteAttempt(attemptId: string): void {
+    const attempt = this.getAttemptById(attemptId);
+    if (!attempt) throw new Error('Attempt not found');
+    this.data.participants = this.data.participants.filter((p) => p.id !== attemptId);
+    this.data.attempt_answers = this.data.attempt_answers.filter((a) => a.attempt_id !== attemptId);
+    this.persist();
+  }
+
+  public deleteAllAttempts(eventCode: string): { deleted: number } {
+    const event = this.getEventByCode(eventCode);
+    if (!event) throw new Error('Event not found');
+    const ids = this.data.participants.filter((p) => p.event_code === event.event_code).map((p) => p.id);
+    this.data.participants = this.data.participants.filter((p) => p.event_code !== event.event_code);
+    this.data.attempt_answers = this.data.attempt_answers.filter((a) => !ids.includes(a.attempt_id));
+    this.persist();
+    return { deleted: ids.length };
+  }
+
   // --- LEADERBOARD ---
 
   public getLeaderboard(eventCode: string): {

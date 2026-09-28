@@ -360,6 +360,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  const handleDeleteAttempt = async (attemptId: string, studentName: string) => {
+    if (!confirm(`Permanently DELETE the record for "${studentName}"?\n\nThis cannot be undone. Use "Reset" instead if you just want them to retake the quiz.`)) {
+      return;
+    }
+    try {
+      await api.admin.deleteAttempt(token, attemptId);
+      showNotification(`Record deleted for ${studentName}.`);
+      loadAttempts();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to delete record', 'error');
+    }
+  };
+
+  const handleDeleteAllAttempts = async () => {
+    const count = attempts.length;
+    if (count === 0) {
+      showNotification('No records to delete for this event.', 'error');
+      return;
+    }
+    const ok = confirm(
+      `Permanently DELETE ALL ${count} student record(s) for event "${selectedEventCode}"?\n\nThis is irreversible and clears the event for a fresh start. Make sure you have exported the CSV if needed.`
+    );
+    if (!ok) return;
+    const second = confirm('Are you absolutely sure? This will wipe EVERY participant for this event.');
+    if (!second) return;
+    try {
+      const res: any = await api.admin.deleteAllAttempts(token, selectedEventCode);
+      showNotification(`Deleted ${res?.deleted ?? count} record(s). Event is now fresh.`);
+      loadAttempts();
+    } catch (err: any) {
+      showNotification(err.message || 'Failed to delete all records', 'error');
+    }
+  };
+
   // Copy link
   const copyQuizLink = (code: string) => {
     const url = `${window.location.origin}/quiz/${code}`;
@@ -999,6 +1033,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <Download className="w-4 h-4" />
                 <span>Export CSV</span>
               </button>
+
+              <button
+                onClick={handleDeleteAllAttempts}
+                disabled={attempts.length === 0}
+                className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                title="Permanently delete ALL student records for this event (fresh start)"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete All</span>
+              </button>
             </div>
           </div>
 
@@ -1084,14 +1128,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </td>
 
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => handleResetAttempt(att.attemptId, att.fullName)}
-                          className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
-                          title="Reset student attempt so they can re-enter"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 inline mr-1" />
-                          <span>Reset</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleResetAttempt(att.attemptId, att.fullName)}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Reset student attempt so they can re-enter"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 inline mr-1" />
+                            <span>Reset</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAttempt(att.attemptId, att.fullName)}
+                            className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                            title="Permanently delete this student record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

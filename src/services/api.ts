@@ -352,6 +352,30 @@ export const api = {
       return res.json();
     },
 
+    async deleteAttempt(token: string, attemptId: string) {
+      const res = await fetch(`${API_BASE}/admin/attempts/${attemptId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to delete student record');
+      }
+      return res.json();
+    },
+
+    async deleteAllAttempts(token: string, eventCode: string) {
+      const res = await fetch(`${API_BASE}/admin/attempts/${encodeURIComponent(eventCode)}/all`, {
+        method: 'DELETE',
+        headers: { 'x-admin-token': token },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to delete all student records');
+      }
+      return res.json();
+    },
+
     getExportUrl(token: string, eventCode: string) {
       return `${API_BASE}/admin/export/${encodeURIComponent(eventCode)}`;
     },
