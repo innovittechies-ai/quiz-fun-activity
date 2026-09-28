@@ -15,6 +15,8 @@ import {
   Clock,
   Award,
   QrCode,
+  Instagram,
+  Linkedin,
 } from 'lucide-react';
 
 export default function App() {
@@ -396,6 +398,46 @@ export default function App() {
                       Database enforces unique phone/email check with admin reset capabilities.
                     </p>
                   </div>
+                </div>
+
+                {/* Follow Us */}
+                <div className="mt-10 pt-8 border-t border-emerald-200">
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-3">
+                    Follow Us
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <a
+                      href="https://www.instagram.com/innovit_technologies"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-emerald-200 hover:border-fuchsia-300 hover:bg-fuchsia-50 transition-all"
+                      title="Follow Innovit on Instagram"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-fuchsia-500 via-rose-500 to-amber-400 flex items-center justify-center">
+                        <Instagram className="w-4 h-4 text-white" />
+                      </span>
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-fuchsia-600 transition-colors">
+                        Instagram
+                      </span>
+                    </a>
+                    <a
+                      href="https://www.linkedin.com/school/innovit-technology/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-emerald-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+                      title="Follow Innovit on LinkedIn"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-[#0A66C2] flex items-center justify-center">
+                        <Linkedin className="w-4 h-4 text-white" />
+                      </span>
+                      <span className="text-sm font-bold text-slate-700 group-hover:text-blue-600 transition-colors">
+                        LinkedIn
+                      </span>
+                    </a>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-3">
+                    &copy; {new Date().getFullYear()} Innovit Technologies. All rights reserved.
+                  </p>
                 </div>
               </div>
             </div>

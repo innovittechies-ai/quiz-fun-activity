@@ -27,8 +27,10 @@ import {
   Lock,
   LogOut,
   Gift,
+  Instagram,
 } from 'lucide-react';
 import { SpinWheel } from './SpinWheel.js';
+import { InstagramQuiz } from './InstagramQuiz.js';
 // NOTE: Google sign-in removed — simple username + password login only.
 
 interface AdminPanelProps {
@@ -55,8 +57,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Tabs: 'overview' | 'events' | 'questions' | 'participants' | 'luckydraw'
-  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants' | 'luckydraw'>('overview');
+  // Tabs: 'overview' | 'events' | 'questions' | 'participants' | 'luckydraw' | 'instaquiz'
+  const [activeTab, setActiveTab] = useState<'overview' | 'events' | 'questions' | 'participants' | 'luckydraw' | 'instaquiz'>('overview');
 
   // Data states
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -589,6 +591,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <Gift className="w-4 h-4" />
           <span>Lucky Draw</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('instaquiz')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+            activeTab === 'instaquiz'
+              ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40'
+              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+          }`}
+        >
+          <Instagram className="w-4 h-4" />
+          <span>Instagram Quiz</span>
+        </button>
       </div>
 
       {/* TAB 1: OVERVIEW */}
@@ -1118,6 +1132,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               participants={attempts.filter((a) => a.status === 'completed')}
               eventCode={selectedEventCode}
             />
+          </div>
+        </div>
+      )}
+
+      {/* TAB: INSTAGRAM QUIZ (Admin-only live T-shirt giveaway) */}
+      {activeTab === 'instaquiz' && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-white">Instagram Follow Quiz</h2>
+            <p className="text-xs text-slate-400">
+              Live one-time activity &mdash; ask a student the question, they pick an option, win a T-shirt if correct.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-b from-emerald-50 to-green-100 border border-emerald-200 shadow-xl">
+            <InstagramQuiz />
           </div>
         </div>
       )}
