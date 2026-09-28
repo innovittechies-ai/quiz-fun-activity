@@ -5,26 +5,16 @@ import { Navbar } from './components/Navbar.js';
 import { StudentRegistration } from './components/StudentRegistration.js';
 import { QuizPlayer } from './components/QuizPlayer.js';
 import { QuizResult } from './components/QuizResult.js';
+import { AdminPanel } from './components/AdminPanel.js';
 import { Leaderboard } from './components/Leaderboard.js';
 import { ProjectorView } from './components/ProjectorView.js';
-import { AdminPanel } from './components/AdminPanel.js';
 import QRCode from 'qrcode';
 import {
-  Sparkles,
-  School,
   ArrowRight,
-  Tv,
-  Trophy,
   Shield,
-  HelpCircle,
   Clock,
-  Flame,
   Award,
   QrCode,
-  Copy,
-  Check,
-  ExternalLink,
-  Maximize,
 } from 'lucide-react';
 
 export default function App() {
@@ -51,7 +41,6 @@ export default function App() {
 
   // Landing Page QR Code State
   const [landingQrUrl, setLandingQrUrl] = useState<string>('');
-  const [landingCopied, setLandingCopied] = useState<boolean>(false);
 
   const effectiveLandingCode = (homeCodeInput.trim() || activeEventCode || 'DEMO2026').toUpperCase();
 
@@ -70,13 +59,6 @@ export default function App() {
       .then((url) => setLandingQrUrl(url))
       .catch((err) => console.error('Error generating landing QR:', err));
   }, [effectiveLandingCode]);
-
-  const handleCopyLandingLink = () => {
-    const url = `${window.location.origin}/quiz/${effectiveLandingCode}`;
-    navigator.clipboard.writeText(url);
-    setLandingCopied(true);
-    setTimeout(() => setLandingCopied(false), 2500);
-  };
 
   // Parse path from window.location
   const parseRoute = useCallback(() => {
@@ -294,7 +276,6 @@ export default function App() {
             ) : quizResult ? (
               <QuizResult
                 result={quizResult}
-                onViewLeaderboard={(code) => navigate('leaderboard', code)}
                 onHome={() => {
                   setQuizResult(null);
                   navigate('home');
@@ -330,7 +311,7 @@ export default function App() {
 
               <div className="relative z-10">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500/20 to-cyan-500/20 border border-cyan-400/30 text-cyan-300 text-xs font-bold uppercase tracking-wider mb-6">
-                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <Award className="w-4 h-4 text-cyan-400" />
                   Innovit Engineering College Events
                 </div>
 
@@ -344,7 +325,7 @@ export default function App() {
                 <p className="text-lg sm:text-xl text-slate-300 font-medium max-w-xl mx-auto mb-8">
                   "How well do you really understand AI?"
                   <span className="block text-sm text-slate-400 mt-2 font-normal">
-                    5 humorous, technically meaningful AI questions &bull; 5-minute server countdown &bull; Instant live leaderboard.
+                    5 technically meaningful AI questions &bull; 5-minute server countdown &bull; Instant scoring.
                   </span>
                 </p>
 
@@ -377,16 +358,6 @@ export default function App() {
 
                     {/* QR Details & Action Controls */}
                     <div className="flex-1 text-center md:text-left space-y-3">
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
-                          {effectiveLandingCode}
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                          Active Event
-                        </span>
-                      </div>
-
                       <h3 className="text-xl font-black text-white">
                         Scan with Phone Camera to Start
                       </h3>
@@ -394,43 +365,15 @@ export default function App() {
                         Point your phone camera at this QR code to open the registration form and start the 5-minute timed challenge instantly.
                       </p>
 
-                      {/* Quick Action Buttons */}
+                      {/* Quick Action Button */}
                       <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-2">
                         <button
                           type="button"
                           onClick={() => navigate('quiz', effectiveLandingCode)}
-                          className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer transition-all"
+                          className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-cyan-500 hover:from-indigo-500 hover:to-cyan-400 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer transition-all"
                         >
                           <span>Start on this Device</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleCopyLandingLink}
-                          className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
-                        >
-                          {landingCopied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              <span className="text-emerald-400">Link Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Copy Link</span>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => navigate('qr', effectiveLandingCode)}
-                          className="px-3.5 py-2.5 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                          title="Fullscreen Projector Mode for Stage"
-                        >
-                          <Tv className="w-3.5 h-3.5" />
-                          <span>Auditorium Projector</span>
+                          <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -459,85 +402,8 @@ export default function App() {
                   </button>
                 </form>
 
-                {/* Quick Launch Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
-                  {/* Demo Event Card */}
-                  <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 text-left hover:border-slate-700 transition-all flex flex-col justify-between shadow-xl">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-mono text-xs font-bold text-cyan-400 px-2 py-0.5 bg-cyan-950 border border-cyan-800 rounded">
-                          DEMO2026
-                        </span>
-                        <span className="text-[10px] text-emerald-400 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                          Ready to Test
-                        </span>
-                      </div>
-                      <h3 className="text-base font-bold text-white mb-1">
-                        Innovit AI Challenge Demo
-                      </h3>
-                      <p className="text-xs text-slate-400 flex items-center gap-1.5 mb-3">
-                        <School className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Gyan Sagar College of Engineering</span>
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        Test the full student quiz flow, server timer countdown, refresh resumption, and instant scoring.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
-                      <button
-                        onClick={() => navigate('quiz', 'DEMO2026')}
-                        className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer text-center"
-                      >
-                        Start Demo Quiz &rarr;
-                      </button>
-                      <button
-                        onClick={() => navigate('qr', 'DEMO2026')}
-                        className="p-2 bg-slate-800 hover:bg-slate-750 text-violet-300 rounded-lg text-xs cursor-pointer"
-                        title="Display Projector QR on Auditorium Screen"
-                      >
-                        <Tv className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Projector Mode Card */}
-                  <div className="p-5 rounded-2xl bg-gradient-to-b from-slate-900 to-indigo-950/40 border border-indigo-500/30 text-left flex flex-col justify-between shadow-xl">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">
-                          For College Presenters
-                        </span>
-                        <Tv className="w-4 h-4 text-cyan-400" />
-                      </div>
-                      <h3 className="text-base font-bold text-white mb-1">
-                        Auditorium Projector QR
-                      </h3>
-                      <p className="text-xs text-slate-400 mb-3">
-                        High-contrast, fullscreen display designed for auditorium projectors with live audience join counter.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-2">
-                      <button
-                        onClick={() => navigate('qr', 'DEMO2026')}
-                        className="flex-1 py-2 px-3 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer text-center"
-                      >
-                        Launch Projector Mode
-                      </button>
-                      <button
-                        onClick={() => navigate('admin')}
-                        className="p-2 bg-slate-800 hover:bg-slate-750 text-indigo-300 rounded-lg text-xs cursor-pointer"
-                        title="Open Admin Console"
-                      >
-                        <Shield className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Features Highlights */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl mx-auto mt-12 pt-8 border-t border-slate-800/80 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl mx-auto mt-12 pt-8 border-t border-slate-800/80 text-left">
                   <div className="p-3">
                     <Clock className="w-5 h-5 text-amber-400 mb-1.5" />
                     <h4 className="text-xs font-bold text-white">Server-Timed</h4>
@@ -551,14 +417,6 @@ export default function App() {
                     <h4 className="text-xs font-bold text-white">Strict Scoring</h4>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       Evaluated strictly on the server; client answers are never trusted.
-                    </p>
-                  </div>
-
-                  <div className="p-3">
-                    <Trophy className="w-5 h-5 text-cyan-400 mb-1.5" />
-                    <h4 className="text-xs font-bold text-white">Live Leaderboard</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Ranks by highest score &bull; fastest time &bull; earliest submission.
                     </p>
                   </div>
 

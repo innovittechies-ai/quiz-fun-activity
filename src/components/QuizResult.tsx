@@ -6,21 +6,17 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Sparkles,
   Share2,
-  ArrowRight,
   HelpCircle,
-  Flame,
   Award,
 } from 'lucide-react';
 
 interface QuizResultProps {
   result: QuizResultPayload;
-  onViewLeaderboard: (eventCode: string) => void;
   onHome: () => void;
 }
 
-export const QuizResult: React.FC<QuizResultProps> = ({ result, onViewLeaderboard, onHome }) => {
+export const QuizResult: React.FC<QuizResultProps> = ({ result, onHome }) => {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -150,16 +146,6 @@ export const QuizResult: React.FC<QuizResultProps> = ({ result, onViewLeaderboar
 
         {/* Actions Button Row */}
         <div className="flex flex-col sm:flex-row gap-3 mt-6 justify-center">
-          {result.event.leaderboardEnabled && (
-            <button
-              onClick={() => onViewLeaderboard(result.event.eventCode)}
-              className="py-3 px-6 rounded-xl bg-gradient-to-r from-amber-600 via-amber-500 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
-            >
-              <Trophy className="w-4 h-4" />
-              <span>Check Live Leaderboard</span>
-            </button>
-          )}
-
           <button
             onClick={handleShare}
             className="py-3 px-6 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm border border-slate-700 flex items-center justify-center gap-2 transition-all cursor-pointer"
