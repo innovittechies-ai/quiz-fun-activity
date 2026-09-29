@@ -167,7 +167,11 @@ app.get('/api/quiz/attempt/:attemptId', async (req: Request, res: Response) => {
     }
 
     const answers = await db.getAttemptAnswersMap(attempt.id);
-    const questions = await db.getClientQuestionsForEvent(event);
+    // Pass the student's identifier as the seed so a page refresh returns the SAME 10 questions
+    // they got at registration (seeded shuffle is deterministic). Without this, the non-seeded
+    // fallback would return ALL event.question_ids (e.g. 80 for DEMO2026).
+    const participant = await db.getParticipantById(attempt.participant_id);
+    const questions = await db.getClientQuestionsForEvent(event, participant?.identifier);
 
     res.json({
       attemptId: attempt.id,

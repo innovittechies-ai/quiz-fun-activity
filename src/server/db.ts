@@ -292,7 +292,8 @@ class DatabaseStore {
       }
     }
 
-    return questions;
+    // Defensive cap: never return more than 10 questions to a student.
+    return questions.slice(0, 10);
   }
 
   public createQuestion(data: Omit<Question, 'id' | 'created_at' | 'updated_at'>): Question {

@@ -108,7 +108,9 @@ export class SupabaseDatabaseStore {
         if (!questions.some((e) => e.id === q.id)) questions.push(toClient(q));
       }
     }
-    return questions;
+    // Defensive cap: a student must never receive more than 10 questions, even if a code
+    // path forgets to pass a seed (which would otherwise return ALL event.question_ids).
+    return questions.slice(0, 10);
   }
   async createQuestion(_d: any): Promise<Question> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
   async updateQuestion(_id: string, _u: any): Promise<Question> { throw new Error('Questions are static. Edit src/server/sampleQuestions.ts.'); }
