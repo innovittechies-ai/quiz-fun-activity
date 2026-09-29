@@ -135,7 +135,7 @@ export class SupabaseDatabaseStore {
 
   async registerStudentAndStartQuiz(data: {
     eventCode: string; fullName: string; identifier: string; collegeName: string;
-    branch?: string; year?: string; deviceInfo?: string;
+    branch?: string; year?: string; deviceInfo?: string; email?: string;
   }): Promise<any> {
     const event = await this.getEventByCode(data.eventCode);
     if (!event) throw new Error(`Event with code '${data.eventCode}' not found.`);
@@ -165,7 +165,7 @@ export class SupabaseDatabaseStore {
     const now = new Date().toISOString();
     const doc: PDoc = {
       id: docId, event_id: event.id, event_code: event.event_code, full_name: data.fullName.trim(),
-      identifier: normId, email: isEmail ? normId : '', mobile: isEmail ? '' : normId,
+      identifier: normId, email: data.email?.trim() || (isEmail ? normId : ''), mobile: data.email ? normId : (isEmail ? '' : normId),
       college: data.collegeName.trim() || event.college_name, branch: data.branch?.trim() || '', year: data.year?.trim() || '',
       score: 0, total_questions: clientQuestions.length, percentage: 0, duration_seconds: null,
       status: 'in_progress', started_at: now, completed_at: null, device_info: data.deviceInfo || '',

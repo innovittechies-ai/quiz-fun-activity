@@ -71,7 +71,7 @@ class DatabaseStore {
       this.data.events.push({
         id: 'event-demo-2026',
         event_name: 'Innovit AI Challenge Demo',
-        college_name: 'Gyan Sagar College of Engineering',
+        college_name: 'Innovit Partner College',
         event_code: 'DEMO2026',
         description: 'Test your understanding of modern Artificial Intelligence, Machine Learning, and Generative models in 5 quick questions.',
         duration_seconds: 300,
@@ -92,7 +92,7 @@ class DatabaseStore {
         {
           id: 'event-demo-2026',
           event_name: 'Innovit AI Challenge Demo',
-          college_name: 'Gyan Sagar College of Engineering',
+          college_name: 'Innovit Partner College',
           event_code: 'DEMO2026',
           description: 'Test your understanding of modern Artificial Intelligence, Machine Learning, and Generative models in 5 quick questions.',
           duration_seconds: 300,
@@ -353,6 +353,7 @@ class DatabaseStore {
     branch?: string;
     year?: string;
     deviceInfo?: string;
+    email?: string;
   }): {
     attempt: QuizAttempt;
     participant: Participant;

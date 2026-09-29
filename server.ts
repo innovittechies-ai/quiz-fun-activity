@@ -92,10 +92,10 @@ app.get('/api/events/:code', async (req: Request, res: Response) => {
 // Student registration and quiz start / resume
 app.post('/api/quiz/register', async (req: Request, res: Response) => {
   try {
-    const { eventCode, fullName, identifier, collegeName, branch, year } = req.body;
+    const { eventCode, fullName, identifier, collegeName, branch, year, email } = req.body;
 
     if (!eventCode || !fullName || !identifier) {
-      res.status(400).json({ error: 'Event code, Full Name, and Mobile/Email are required.' });
+      res.status(400).json({ error: 'Event code, Full Name, and Mobile Number are required.' });
       return;
     }
 
@@ -106,6 +106,7 @@ app.post('/api/quiz/register', async (req: Request, res: Response) => {
       collegeName: collegeName || '',
       branch,
       year,
+      email: email || '',
       deviceInfo: req.headers['user-agent'] || '',
     });
 

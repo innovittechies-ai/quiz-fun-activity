@@ -165,6 +165,7 @@ export default function App() {
   const handleStudentRegistration = async (formData: {
     fullName: string;
     identifier: string;
+    email: string;
     collegeName: string;
     branch: string;
     year: string;
@@ -177,6 +178,7 @@ export default function App() {
         eventCode: activeEventCode,
         fullName: formData.fullName,
         identifier: formData.identifier,
+        email: formData.email,
         collegeName: formData.collegeName,
         branch: formData.branch,
         year: formData.year,

@@ -13,7 +13,7 @@ export const STATIC_EVENTS: Event[] = [
   {
     id: 'event-demo-2026',
     event_name: 'Innovit AI Challenge Demo',
-    college_name: 'Gyan Sagar College of Engineering',
+    college_name: 'Innovit Partner College',
     event_code: 'DEMO2026',
     description:
       'Test your understanding of modern Artificial Intelligence, Machine Learning, Generative AI, and Agentic AI in 10 quick questions.',

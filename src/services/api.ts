@@ -72,7 +72,7 @@ export const api = {
       return {
         id: 'event-demo-2026',
         event_name: 'Innovit AI Challenge Demo',
-        college_name: 'Gyan Sagar College of Engineering',
+        college_name: 'Innovit Partner College',
         event_code: 'DEMO2026',
         description: 'Test your understanding of modern Artificial Intelligence, Machine Learning, and Generative models in 5 quick questions.',
         duration_seconds: 300,
@@ -94,6 +94,7 @@ export const api = {
     collegeName: string;
     branch?: string;
     year?: string;
+    email?: string;
   }): Promise<RegisterQuizResponse> {
     const res = await fetch(`${API_BASE}/quiz/register`, {
       method: 'POST',
@@ -165,7 +166,7 @@ export const api = {
     return {
       event: {
         eventName: 'Innovit AI Challenge Demo',
-        collegeName: 'Gyan Sagar College of Engineering',
+        collegeName: 'Innovit Partner College',
         eventCode: eventCode.toUpperCase(),
         leaderboardEnabled: true,
       },
@@ -173,7 +174,7 @@ export const api = {
         {
           rank: 1,
           participantName: 'Aditya S.',
-          collegeName: 'Gyan Sagar College',
+          collegeName: 'Innovit Partner College',
           branch: 'CSE',
           score: 5,
           totalQuestions: 5,
@@ -183,7 +184,7 @@ export const api = {
         {
           rank: 2,
           participantName: 'Priya K.',
-          collegeName: 'Gyan Sagar College',
+          collegeName: 'Innovit Partner College',
           branch: 'IT',
           score: 4,
           totalQuestions: 5,

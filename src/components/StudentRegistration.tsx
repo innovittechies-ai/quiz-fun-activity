@@ -9,6 +9,7 @@ import {
   School,
   User,
   Mail,
+  Phone,
   GraduationCap,
   AlertCircle,
   Flame,
@@ -19,6 +20,7 @@ interface StudentRegistrationProps {
   onSubmit: (formData: {
     fullName: string;
     identifier: string;
+    email: string;
     collegeName: string;
     branch: string;
     year: string;
@@ -35,6 +37,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [email, setEmail] = useState('');
   const [branch, setBranch] = useState('Computer Science & Engineering');
   const [customBranch, setCustomBranch] = useState('');
   const [year, setYear] = useState('3rd Year');
@@ -50,16 +53,22 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
     }
 
     if (!identifier.trim()) {
-      setLocalError('Please enter your mobile number or college email.');
+      setLocalError('Please enter your mobile number.');
       return;
     }
 
-    // Basic format check: either at least 10 digits or contains '@'
+    // Phone must be a valid number (8-15 digits, allow + and spaces)
     const cleanId = identifier.trim();
     const isPhone = /^[0-9+ -]{8,15}$/.test(cleanId);
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId);
-    if (!isPhone && !isEmail) {
-      setLocalError('Please enter a valid 10-digit mobile number or valid email address.');
+    if (!isPhone) {
+      setLocalError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    // Email is optional, but if provided it must be valid
+    const cleanEmail = email.trim();
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setLocalError('Please enter a valid email address or leave it blank.');
       return;
     }
 
@@ -68,6 +77,7 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
     await onSubmit({
       fullName: fullName.trim(),
       identifier: cleanId,
+      email: cleanEmail,
       collegeName: event.college_name || '',
       branch: finalBranch,
       year,
@@ -167,26 +177,48 @@ export const StudentRegistration: React.FC<StudentRegistrationProps> = ({
             </div>
           </div>
 
-          {/* Identifier: Mobile or Email */}
+          {/* Mobile Number (required) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Mobile Number or Email <span className="text-rose-400">*</span>
+              Mobile Number <span className="text-rose-400">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+                <Phone className="w-4 h-4" />
+              </div>
+              <input
+                type="tel"
+                required
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="e.g. 9876543210"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Used to prevent duplicate attempts and recover your score. Private and never shared.
+            </p>
+          </div>
+
+          {/* Email (optional, after phone) */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              Email ID <span className="text-slate-500 font-normal normal-case tracking-normal">(optional)</span>
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
                 <Mail className="w-4 h-4" />
               </div>
               <input
-                type="text"
-                required
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="e.g. 9876543210 or student@college.edu"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. student@college.edu"
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Used to prevent duplicate attempts and recover your score. Private and never shown on public leaderboards.
+              For future Innovit updates &amp; opportunities. We respect your privacy.
             </p>
           </div>
 

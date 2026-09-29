@@ -204,7 +204,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const defaultQIds = questions.slice(0, 10).map((q) => q.id);
     setEventForm({
       event_name: 'Innovit AI Challenge',
-      college_name: 'Gyan Sagar College of Engineering',
+      college_name: 'Innovit Partner College',
       event_code: `GSCE${new Date().getFullYear()}`,
       description: 'How well do you really understand AI? 10 questions in 10 minutes.',
       duration_seconds: 600,
@@ -1253,7 +1253,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   required
                   value={eventForm.college_name}
                   onChange={(e) => setEventForm({ ...eventForm, college_name: e.target.value })}
-                  placeholder="e.g. Gyan Sagar College of Engineering"
+                  placeholder="e.g. Your College Name"
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
                 />
               </div>

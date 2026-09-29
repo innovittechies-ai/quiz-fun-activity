@@ -9,6 +9,9 @@ import {
   Share2,
   HelpCircle,
   Award,
+  Instagram,
+  Linkedin,
+  Heart,
 } from 'lucide-react';
 
 interface QuizResultProps {
@@ -154,6 +157,35 @@ export const QuizResult: React.FC<QuizResultProps> = ({ result, onHome }) => {
             <span>{copied ? 'Score Copied to Clipboard!' : 'Share Result'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Follow Us on Instagram & LinkedIn */}
+      <div className="mt-6 p-5 rounded-2xl bg-gradient-to-r from-fuchsia-900/30 via-rose-900/20 to-blue-900/30 border border-fuchsia-500/30 text-center">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <Heart className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-bold text-white">Loved the challenge? Follow Innovit for more!</h3>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <a
+            href="https://www.instagram.com/innovit_technologies"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-tr from-fuchsia-500 via-rose-500 to-amber-400 hover:opacity-90 text-white font-bold text-sm shadow-lg transition-all"
+          >
+            <Instagram className="w-4 h-4" />
+            <span>@innovit_technologies</span>
+          </a>
+          <a
+            href="https://www.linkedin.com/school/innovit-technology/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0A66C2] hover:bg-[#0a4fb0] text-white font-bold text-sm shadow-lg transition-all"
+          >
+            <Linkedin className="w-4 h-4" />
+            <span>Innovit Technologies</span>
+          </a>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-3">Stay connected for upcoming challenges, internships, and AI workshops.</p>
       </div>
 
       {/* Question Review Section with Explanations */}
