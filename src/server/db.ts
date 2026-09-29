@@ -830,6 +830,8 @@ class DatabaseStore {
         participantId: a.participant_id,
         fullName: p ? p.full_name : 'Unknown',
         identifier: p ? p.identifier : 'Unknown',
+        email: (p as any)?.email || '',
+        mobile: (p as any)?.mobile || '',
         collegeName: p ? p.college_name : 'Unknown',
         branch: p?.branch || '',
         year: p?.year || '',

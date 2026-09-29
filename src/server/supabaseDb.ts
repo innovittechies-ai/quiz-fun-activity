@@ -309,6 +309,7 @@ export class SupabaseDatabaseStore {
     const { data } = await client().from(TABLE).select('*').eq('event_code', event.event_code);
     return (data || []).map((a: any) => ({
       attemptId: a.id, participantId: a.id, fullName: a.full_name, identifier: a.identifier,
+      email: a.email || '', mobile: a.mobile || '',
       collegeName: a.college, branch: a.branch || '', year: a.year || '',
       status: a.status, score: a.score, totalQuestions: a.total_questions, percentage: a.percentage,
       durationTakenSeconds: a.duration_seconds, startedAt: a.started_at, completedAt: a.completed_at,
@@ -317,11 +318,13 @@ export class SupabaseDatabaseStore {
 
   async exportEventCSV(eventCode: string): Promise<string> {
     const attempts = await this.getEventAttemptsDetails(eventCode);
-    const headers = ['Rank','Full Name','Email / Mobile','College Name','Branch','Year','Status','Score','Total Questions','Percentage (%)','Time Taken (seconds)','Started At','Completed At'];
+    const headers = ['Rank','Full Name','Mobile Number','Email ID','College Name','Branch','Year','Status','Score','Total Questions','Percentage (%)','Time Taken (seconds)','Started At','Completed At'];
     const sorted = [...attempts].sort((a, b) => { if (b.score !== a.score) return b.score - a.score; return (a.durationTakenSeconds || 999) - (b.durationTakenSeconds || 999); });
     const rows = sorted.map((att, idx) => [
       att.status === 'completed' ? idx + 1 : 'N/A',
-      `"${att.fullName.replace(/"/g,'""')}"`, `"${att.identifier.replace(/"/g,'""')}"`,
+      `"${att.fullName.replace(/"/g,'""')}"`,
+      `"${(att.mobile || att.identifier || '').replace(/"/g,'""')}"`,
+      `"${(att.email || '').replace(/"/g,'""')}"`,
       `"${att.collegeName.replace(/"/g,'""')}"`, `"${att.branch.replace(/"/g,'""')}"`,
       `"${att.year.replace(/"/g,'""')}"`, att.status, att.score, att.totalQuestions, att.percentage,
       att.durationTakenSeconds || '', att.startedAt, att.completedAt || '',

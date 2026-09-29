@@ -11,7 +11,9 @@ import {
   Award,
   Instagram,
   Linkedin,
-  Heart,
+  Sparkles,
+  ArrowRight,
+  ExternalLink,
 } from 'lucide-react';
 
 interface QuizResultProps {
@@ -159,33 +161,69 @@ export const QuizResult: React.FC<QuizResultProps> = ({ result, onHome }) => {
         </div>
       </div>
 
-      {/* Follow Us on Instagram & LinkedIn */}
-      <div className="mt-6 p-5 rounded-2xl bg-gradient-to-r from-fuchsia-900/30 via-rose-900/20 to-blue-900/30 border border-fuchsia-500/30 text-center">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <Heart className="w-4 h-4 text-rose-400" />
-          <h3 className="text-sm font-bold text-white">Loved the challenge? Follow Innovit for more!</h3>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-3">
+      {/* Follow Us — prominent highlight card (mobile-first) */}
+      <div className="mt-6 rounded-2xl overflow-hidden shadow-2xl shadow-emerald-500/20 border border-emerald-300">
+        {/* Top accent bar */}
+        <div className="h-1.5 bg-gradient-to-r from-fuchsia-500 via-amber-400 to-emerald-400" />
+
+        <div className="bg-white px-5 py-6 sm:px-7 sm:py-7 text-center">
+          {/* Headline */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold uppercase tracking-wider mb-3">
+            <Sparkles className="w-3.5 h-3.5" />
+            Don&apos;t miss out
+          </div>
+          <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-1.5 leading-snug">
+            Follow Innovit for exciting opportunities 🚀
+          </h3>
+          <p className="text-sm text-slate-600 max-w-md mx-auto mb-5">
+            Internships, AI workshops, hackathons &amp; career updates — straight to your feed. Tap a button below to follow us now.
+          </p>
+
+          {/* Follow buttons — stacked full-width on mobile, 2-col on larger screens */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto">
+            <a
+              href="https://www.instagram.com/innovit_technologies"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-gradient-to-tr from-fuchsia-500 via-rose-500 to-amber-400 hover:opacity-90 text-white font-bold text-sm shadow-lg transition-all"
+            >
+              <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                <Instagram className="w-4 h-4" />
+              </span>
+              <span className="flex flex-col items-start leading-tight">
+                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-90">Instagram</span>
+                <span>@innovit_technologies</span>
+              </span>
+              <ArrowRight className="w-4 h-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
+            </a>
+            <a
+              href="https://www.linkedin.com/school/innovit-technology/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-xl bg-[#0A66C2] hover:bg-[#0a4fb0] text-white font-bold text-sm shadow-lg transition-all"
+            >
+              <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                <Linkedin className="w-4 h-4" />
+              </span>
+              <span className="flex flex-col items-start leading-tight">
+                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-90">LinkedIn</span>
+                <span>Innovit Technologies</span>
+              </span>
+              <ArrowRight className="w-4 h-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
+            </a>
+          </div>
+
+          {/* Know more link */}
           <a
-            href="https://www.instagram.com/innovit_technologies"
+            href="https://www.innovittechnologies.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-tr from-fuchsia-500 via-rose-500 to-amber-400 hover:opacity-90 text-white font-bold text-sm shadow-lg transition-all"
+            className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 transition-colors"
           >
-            <Instagram className="w-4 h-4" />
-            <span>@innovit_technologies</span>
-          </a>
-          <a
-            href="https://www.linkedin.com/school/innovit-technology/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0A66C2] hover:bg-[#0a4fb0] text-white font-bold text-sm shadow-lg transition-all"
-          >
-            <Linkedin className="w-4 h-4" />
-            <span>Innovit Technologies</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Know more: innovittechnologies.com</span>
           </a>
         </div>
-        <p className="text-[11px] text-slate-400 mt-3">Stay connected for upcoming challenges, internships, and AI workshops.</p>
       </div>
 
       {/* Question Review Section with Explanations */}

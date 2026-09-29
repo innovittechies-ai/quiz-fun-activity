@@ -1086,7 +1086,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[11px] tracking-wider border-b border-slate-800">
                 <tr>
                   <th className="px-4 py-3.5">Student</th>
-                  <th className="px-4 py-3.5">Contact (Private)</th>
+                  <th className="px-4 py-3.5">Mobile</th>
+                  <th className="px-4 py-3.5">Email</th>
                   <th className="px-4 py-3.5">College & Branch</th>
                   <th className="px-4 py-3.5">Status</th>
                   <th className="px-4 py-3.5 text-center">Score</th>
@@ -1097,7 +1098,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <tbody className="divide-y divide-slate-800/80">
                 {filteredAttempts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-500">
+                    <td colSpan={8} className="text-center py-12 text-slate-500">
                       No student attempts found for this event yet.
                     </td>
                   </tr>
@@ -1109,7 +1110,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </td>
 
                       <td className="px-4 py-3 text-slate-300 font-mono text-xs whitespace-nowrap">
-                        {att.identifier}
+                        {att.mobile || att.identifier}
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-300 font-mono text-xs whitespace-nowrap">
+                        {att.email ? (
+                          <span className="text-cyan-300">{att.email}</span>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">
