@@ -3,6 +3,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { db } from './src/server/db.js';
+import { processParticipants } from './src/server/attendance.js';
+import {
+  fetchMeetingsByDate,
+  fetchMeetingParticipants,
+  getZoomToken,
+} from './src/server/zoom.js';
 
 dotenv.config();
 
@@ -457,6 +463,65 @@ app.get('/api/admin/export/:eventCode', requireAdmin, async (req: Request, res: 
     res.send('\uFEFF' + csv);
   } catch (err: any) {
     res.status(404).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// ZOOM ATTENDANCE (director / admin)
+// ==========================================
+
+app.get('/api/attendance/meetings', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const date = typeof req.query.date === 'string' ? req.query.date : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: 'Invalid or missing date (YYYY-MM-DD)' });
+      return;
+    }
+
+    const tokenResult = await getZoomToken();
+    if ('error' in tokenResult) {
+      res.status(502).json({ error: tokenResult.error });
+      return;
+    }
+
+    const result = await fetchMeetingsByDate(tokenResult.token, date);
+    if ('error' in result) {
+      res.status(502).json({ error: result.error });
+      return;
+    }
+
+    res.json({ meetings: result.meetings, warning: result.warning });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load meetings' });
+  }
+});
+
+app.get('/api/attendance/participants', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const meetingId = typeof req.query.meetingId === 'string' ? req.query.meetingId.trim() : '';
+    const sessionLength = Number(req.query.sessionLength || '90');
+
+    if (!meetingId) {
+      res.status(400).json({ error: 'Missing meetingId' });
+      return;
+    }
+
+    const tokenResult = await getZoomToken();
+    if ('error' in tokenResult) {
+      res.status(502).json({ error: tokenResult.error });
+      return;
+    }
+
+    const result = await fetchMeetingParticipants(tokenResult.token, meetingId);
+    if ('error' in result) {
+      res.status(502).json({ error: result.error });
+      return;
+    }
+
+    const students = processParticipants(result.participants, sessionLength);
+    res.json({ students, rawCount: result.participants.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to load participants' });
   }
 });
 

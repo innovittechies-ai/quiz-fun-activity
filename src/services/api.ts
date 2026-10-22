@@ -1,3 +1,4 @@
+import type { StudentRow } from '../lib/attendance-format.js';
 import {
   Event,
   Question,
@@ -379,6 +380,38 @@ export const api = {
 
     getExportUrl(token: string, eventCode: string) {
       return `${API_BASE}/admin/export/${encodeURIComponent(eventCode)}`;
+    },
+
+    async getAttendanceMeetings(token: string, date: string) {
+      const res = await fetch(
+        `${API_BASE}/attendance/meetings?date=${encodeURIComponent(date)}`,
+        { headers: { 'x-admin-token': token } },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
+      return data as {
+        meetings: Array<{
+          id: number | string;
+          uuid?: string;
+          topic?: string;
+          start_time?: string;
+          duration?: number;
+        }>;
+        warning?: string;
+      };
+    },
+
+    async getAttendanceParticipants(token: string, meetingId: string, sessionLength: number) {
+      const params = new URLSearchParams({
+        meetingId,
+        sessionLength: String(sessionLength),
+      });
+      const res = await fetch(`${API_BASE}/attendance/participants?${params}`, {
+        headers: { 'x-admin-token': token },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load attendance');
+      return data as { students: StudentRow[] };
     },
   },
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Event, ClientQuestion, OptionLetter, QuizResultPayload } from './types/index.js';
 import { api, RegisterQuizResponse } from './services/api.js';
 import { Navbar } from './components/Navbar.js';
+import { AttendanceDashboard } from './components/AttendanceDashboard.js';
 import { StudentRegistration } from './components/StudentRegistration.js';
 import { QuizPlayer } from './components/QuizPlayer.js';
 import { QuizResult } from './components/QuizResult.js';
@@ -21,7 +22,9 @@ import {
 
 export default function App() {
   // Navigation State
-  const [currentView, setCurrentView] = useState<'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin'>('home');
+  const [currentView, setCurrentView] = useState<
+    'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin' | 'attendance'
+  >('home');
   const [activeEventCode, setActiveEventCode] = useState<string>('DEMO2026');
 
   // Event State
@@ -64,6 +67,8 @@ export default function App() {
     const path = window.location.pathname;
     if (path.startsWith('/admin')) {
       setCurrentView('admin');
+    } else if (path.startsWith('/attendance')) {
+      setCurrentView('attendance');
     } else if (path.startsWith('/qr/')) {
       const code = path.replace('/qr/', '').split('/')[0].toUpperCase();
       if (code) setActiveEventCode(code);
@@ -89,13 +94,17 @@ export default function App() {
   }, [parseRoute]);
 
   // Navigate helper
-  const navigate = (view: 'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin', paramCode?: string) => {
+  const navigate = (
+    view: 'home' | 'quiz' | 'qr' | 'leaderboard' | 'admin' | 'attendance',
+    paramCode?: string,
+  ) => {
     const code = paramCode ? paramCode.toUpperCase() : activeEventCode;
     if (code) setActiveEventCode(code);
     setCurrentView(view);
 
     let targetUrl = '/';
     if (view === 'admin') targetUrl = '/admin';
+    else if (view === 'attendance') targetUrl = '/attendance';
     else if (view === 'quiz' && code) targetUrl = `/quiz/${code}`;
     else if (view === 'qr' && code) targetUrl = `/qr/${code}`;
     else if (view === 'leaderboard' && code) targetUrl = `/leaderboard/${code}`;
@@ -233,6 +242,8 @@ export default function App() {
             onOpenLeaderboard={(code) => navigate('leaderboard', code)}
           />
         )}
+
+        {currentView === 'attendance' && <AttendanceDashboard />}
 
         {/* VIEW: LEADERBOARD */}
         {currentView === 'leaderboard' && (
