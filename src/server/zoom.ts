@@ -128,20 +128,10 @@ export async function fetchMeetingsByDate(
 export type RawParticipant = {
   name?: string;
   user_email?: string;
-  email?: string;
-  user_id?: string;
-  id?: string;
   join_time?: string;
   leave_time?: string;
   duration?: number;
 };
-
-/** Best available email from Zoom report/dashboard participant payloads. */
-export function participantEmailFromRaw(p: RawParticipant): string {
-  const raw = (p.user_email || p.email || '').trim();
-  if (!raw || raw === 'N/A') return '';
-  return raw;
-}
 
 export async function fetchMeetingParticipants(
   token: string,
