@@ -350,7 +350,7 @@ export const AttendanceDashboard: React.FC = () => {
                 </div>
 
                 <div className="overflow-x-auto rounded-xl border border-emerald-100">
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full text-sm text-left text-slate-900">
                     <thead className="bg-emerald-50 text-emerald-800 text-xs uppercase">
                       <tr>
                         <th className="px-4 py-3">Student</th>
@@ -359,12 +359,12 @@ export const AttendanceDashboard: React.FC = () => {
                         <th className="px-4 py-3">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-emerald-50">
+                    <tbody className="divide-y divide-emerald-50 text-slate-900">
                       {filtered.map((s) => (
                         <tr key={`${s.email}-${s.name}`} className="hover:bg-emerald-50/50">
-                          <td className="px-4 py-3 font-medium text-slate-800">{s.name}</td>
-                          <td className="px-4 py-3 text-slate-500">{s.email}</td>
-                          <td className="px-4 py-3">{s.durationMin} min</td>
+                          <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
+                          <td className="px-4 py-3 text-slate-900">{s.email}</td>
+                          <td className="px-4 py-3 font-medium text-slate-900">{s.durationMin} min</td>
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${categoryClass(s.category)}`}

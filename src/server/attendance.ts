@@ -1,4 +1,4 @@
-import type { RawParticipant } from './zoom.js';
+import { participantEmailFromRaw, type RawParticipant } from './zoom.js';
 
 export type StudentRow = {
   name: string;
@@ -10,6 +10,8 @@ export type StudentRow = {
 };
 
 export type AttendanceCategory = 'Excellent' | 'Good' | 'Partial' | 'At risk';
+
+type AggregatedParticipant = RawParticipant & { duration: number; mergedEmail: string };
 
 export function convertToIst(utcTimeStr?: string): string {
   if (!utcTimeStr) return 'N/A';
@@ -31,30 +33,51 @@ function categorize(durationMin: number, sessionLengthMin: number): AttendanceCa
   return 'At risk';
 }
 
+function dedupKey(p: RawParticipant): string {
+  const email = participantEmailFromRaw(p);
+  if (email) return `email:${email.toLowerCase()}`;
+  const uid = p.user_id?.trim() || p.id?.trim();
+  if (uid) return `uid:${uid}`;
+  return `name:${(p.name?.trim() || 'Unknown').toLowerCase()}`;
+}
+
 export function processParticipants(
   participants: RawParticipant[],
   sessionLengthMin = 90,
 ): StudentRow[] {
-  const unique = new Map<string, RawParticipant & { duration: number }>();
+  const unique = new Map<string, AggregatedParticipant>();
 
   for (const p of participants) {
-    const email = p.user_email?.trim() || '';
-    const name = p.name?.trim() || 'Unknown';
+    const key = dedupKey(p);
     const duration = p.duration ?? 0;
-    const key = email && email !== 'N/A' ? email : name;
-
+    const email = participantEmailFromRaw(p);
     const existing = unique.get(key);
-    if (!existing || duration > existing.duration) {
-      unique.set(key, { ...p, duration });
+
+    if (!existing) {
+      unique.set(key, { ...p, duration, mergedEmail: email });
+      continue;
     }
+
+    const mergedEmail = existing.mergedEmail || email;
+    const keep = duration > existing.duration ? p : existing;
+    const maxDuration = Math.max(existing.duration, duration);
+
+    unique.set(key, {
+      ...keep,
+      duration: maxDuration,
+      mergedEmail,
+      user_email: mergedEmail || keep.user_email,
+      email: mergedEmail || keep.email,
+    });
   }
 
   const rows: StudentRow[] = [];
   for (const p of unique.values()) {
     const durationMin = Math.floor((p.duration ?? 0) / 60);
+    const displayEmail = p.mergedEmail || participantEmailFromRaw(p) || '—';
     rows.push({
       name: p.name?.trim() || 'Unknown',
-      email: p.user_email?.trim() || '—',
+      email: displayEmail,
       joinTimeIst: convertToIst(p.join_time),
       leaveTimeIst: convertToIst(p.leave_time),
       durationMin,
@@ -64,4 +87,3 @@ export function processParticipants(
 
   return rows.sort((a, b) => b.durationMin - a.durationMin);
 }
-
